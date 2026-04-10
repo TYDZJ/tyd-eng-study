@@ -50,11 +50,12 @@
     "quickapp" : {},
     /* 小程序特有相关 */
     "mp-weixin" : {
-        "appid" : "wx5d80f89a52e6f46b",
+        "appid" : "wx2de747be35e81755",
         "setting" : {
             "urlCheck" : false
         },
-        "usingComponents" : true
+        "usingComponents" : true,
+        "mergeVirtualHostAttributes" : true
     },
     "mp-alipay" : {
         "usingComponents" : true
@@ -63,7 +64,8 @@
         "usingComponents" : true
     },
     "mp-toutiao" : {
-        "usingComponents" : true
+        "usingComponents" : true,
+        "mergeVirtualHostAttributes" : true
     },
     "uniStatistics" : {
         "enable" : false

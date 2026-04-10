@@ -5,4 +5,14 @@ export default defineConfig({
   plugins: [
     uni(),
   ],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        silenceDeprecations: ['legacy-js-api', 'color-functions', 'import'],
+      },
+    },
+  },
+  optimizeDeps: {
+    include: ['uview-plus'],
+  },
 })
