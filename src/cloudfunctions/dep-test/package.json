@@ -1,0 +1,9 @@
+﻿{
+	"name": "dep-test",
+	"version": "1.0.0",
+	"description": "带依赖的云函数测试",
+	"main": "index.js",
+	"dependencies": {
+		"dayjs": "^1.11.20"
+	}
+}
