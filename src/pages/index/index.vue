@@ -1,48 +1,145 @@
+<script setup>
+import TopNav from '@/components/top-nav.vue'
+
+const goLearn = () => {
+  uni.navigateTo({
+    url: '/pages/learn/index?state=learn'
+  })
+}
+const goReview = () => {
+  uni.navigateTo({
+    url: '/pages/learn/index?state=review'
+  })
+}
+
+const goPage = (url) => {
+  uni.navigateTo({
+    url
+  })
+}
+</script>
+
 <template>
-  <view class="content">
-    <image class="logo" src="/static/logo.png"></image>
-    <view class="text-area">
-      <text class="title">{{ title }}</text>
+  <view class="page-box">
+    <TopNav :showBack="false" showSideNav="true" />
+    <!-- 签到 -->
+    <view class="sign-box">
+      <!-- <view class="icon"></view> -->
+      <u-icon name="calendar" size="60" color="black"></u-icon>
+      <text class="title">签到</text>
+      <text class="time">2026-01-01</text>
+    </view>
+
+    <view class="learn-box">
+      <!-- learn -->
+      <view class="learn-item" @click="goLearn()">
+        <text class="title">Learn</text>
+        <text class="count">100</text>
+      </view>
+      <!-- review -->
+      <view class="learn-item" @click="goReview()">
+        <text class="title">Review</text>
+        <text class="count">50</text>
+      </view>
+    </view>
+
+    <!-- 按钮组 -->
+    <view class="bottom-btns">
+      <view class="btn" @click="goPage('/pages/config/index')">配置</view>
+      <view class="btn" @click="goPage('/pages/data/index')">数据</view>
+      <view class="btn" @click="goPage('/pages/mine/index')">我的</view>
     </view>
   </view>
 </template>
 
-<script>
-export default {
-  data() {
-    return {
-      title: 'Hello',
-    }
-  },
-  onLoad() {},
-  methods: {},
+<style lang="scss" scoped>
+.page-box {
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  background-color: rgb(147, 204, 253);
 }
-</script>
 
-<style>
-.content {
+.sign-box {
+  position: absolute;
+  top: 200rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300rpx;
+  height: 300rpx;
+  background-color: rgba(255, 255, 255, 0.5);
+  border-radius: 32rpx;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  justify-content: center;
+  cursor: pointer;
+
+  .icon{
+    width: 100rpx;
+    height: 100rpx;
+    background-color: rgba(97, 108, 255, 0.5);
+    margin-bottom: 30rpx;
+  }
 }
 
-.logo {
-  height: 200rpx;
-  width: 200rpx;
-  margin-top: 200rpx;
-  margin-left: auto;
-  margin-right: auto;
-  margin-bottom: 50rpx;
-}
-
-.text-area {
+.learn-box {
+  position: absolute;
+  left: 0;
+  bottom: 250rpx;
+  width: 100vw;
+  padding: 0 30rpx;
   display: flex;
-  justify-content: center;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 30rpx;
+
+  .learn-item {
+    // width: 300rpx;
+    flex: 1;
+    height: 120rpx;
+    padding: 20rpx;
+    background-color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: start;
+    border-radius: 12rpx;
+    cursor: pointer;
+
+    .title {
+      font-size: 36rpx;
+      font-weight: bold;
+    }
+    .count {
+      font-size: 30rpx;
+      color: #e74a0c;
+    }
+  }
 }
 
-.title {
-  font-size: 36rpx;
-  color: #8f8f94;
+.bottom-btns {
+  position: absolute;
+  bottom: 50px;
+  left: 0;
+  width: 100vw;
+  padding: 0 30rpx;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+
+  .btn {
+    width: 80rpx;
+    height: 80rpx;
+    background-color: rgba(97, 108, 255, 0.5);
+    border-radius: 12rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 30rpx;
+    color: #fff;
+    cursor: pointer;
+  }
 }
 </style>
