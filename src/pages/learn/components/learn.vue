@@ -173,6 +173,12 @@ const showNextForPane = (pane) => {
   const r = rounds.value[wIdx]
   return r.revealed || word.passed
 }
+
+const openDetail = () => {
+  uni.navigateTo({
+    url: '/pages/word-detail/index',
+  })
+}
 </script>
 
 <template>
@@ -196,7 +202,7 @@ const showNextForPane = (pane) => {
           <template v-if="wordList[slotWordIndex[pane]]">
             <!-- 文字区：纵向，英文 + 中文（首轮隐藏中文） -->
             <view class="text-area">
-              <text class="word-en">{{ wordList[slotWordIndex[pane]].en }}</text>
+              <text class="word-en" @click="openDetail">{{ wordList[slotWordIndex[pane]].en }}</text>
               <text
                 v-if="showChinese(slotWordIndex[pane])"
                 class="word-cn"
