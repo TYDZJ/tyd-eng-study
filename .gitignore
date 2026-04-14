@@ -19,3 +19,6 @@ dist
 *.njsproj
 *.sln
 *.sw?
+
+# 词库导入脚本生成的 JSON（运行 npm run import:prepare 后产生）
+scripts/import/data/*.json

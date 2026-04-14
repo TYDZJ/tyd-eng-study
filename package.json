@@ -2,6 +2,9 @@
   "name": "uni-preset-vue",
   "version": "0.0.0",
   "scripts": {
+    "import:prepare": "node scripts/import/prepare-dataset.js",
+    "import:verify": "node scripts/import/verify-import.js",
+    "import:push": "node scripts/import/push-to-cloud.js",
     "dev:custom": "uni -p",
     "dev:h5": "uni",
     "dev:h5:ssr": "uni --ssr",
@@ -61,6 +64,8 @@
     "vue-i18n": "^9.1.9"
   },
   "devDependencies": {
+    "@cloudbase/cli": "^3.2.0",
+    "@cloudbase/node-sdk": "^3.18.1",
     "@dcloudio/types": "^3.4.8",
     "@dcloudio/uni-automator": "3.0.0-5000620260331001",
     "@dcloudio/uni-cli-shared": "3.0.0-5000620260331001",
