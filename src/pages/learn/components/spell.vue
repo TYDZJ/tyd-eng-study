@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 // 模拟数据
 const wordList = ref([
@@ -28,35 +28,36 @@ const wordList = ref([
 // 当前轮播索引
 const currentIndex = ref(0)
 
-// 用户输入
-const userInput = ref('')
-
-// 是否为第一次尝试（每次切换轮播重置）
-const isFirstAttempt = ref(true)
-
-// 是否已显示对比结果
-const showResult = ref(false)
+/**
+ * 每题独立状态（避免所有 swiper-item 共用一份 userInput/showResult 导致离屏页与当前页同态）
+ */
+const rounds = ref(
+  wordList.value.map(() => ({
+    userInput: '',
+    showResult: false,
+    isFirstAttempt: true,
+  })),
+)
 
 // 防止循环触发的标志位
 const isProgrammaticChange = ref(false)
 
-// 获取当前单词
-const currentWord = computed(() => wordList.value[currentIndex.value])
+/** 某题的逐字对比结果 */
+const getCompareResult = (wIdx) => {
+  const r = rounds.value[wIdx]
+  const word = wordList.value[wIdx]
+  if (!r.showResult || !r.userInput) return null
 
-// 计算对比结果
-const compareResult = computed(() => {
-  if (!showResult.value || !userInput.value) return null
-  
-  const input = userInput.value.toLowerCase()
-  const target = currentWord.value.en.toLowerCase()
+  const input = r.userInput.toLowerCase()
+  const target = word.en.toLowerCase()
   const result = []
-  
+
   const maxLength = Math.max(input.length, target.length)
-  
+
   for (let i = 0; i < maxLength; i++) {
     const inputChar = input[i] || ''
     const targetChar = target[i] || ''
-    
+
     if (inputChar === targetChar) {
       result.push({ char: inputChar, status: 'correct' })
     } else {
@@ -68,43 +69,45 @@ const compareResult = computed(() => {
       }
     }
   }
-  
-  return result
-})
 
-// 判断是否完全正确
-const isCorrect = computed(() => {
-  if (!compareResult.value) return false
-  return userInput.value.toLowerCase() === currentWord.value.en.toLowerCase()
-})
+  return result
+}
+
+/** 某题是否拼写完全正确 */
+const isCorrectFor = (wIdx) => {
+  const r = rounds.value[wIdx]
+  const word = wordList.value[wIdx]
+  if (!r.showResult || !r.userInput) return false
+  return r.userInput.toLowerCase() === word.en.toLowerCase()
+}
 
 // 处理确认或重试按钮点击
-const handleConfirmOrRetry = () => {
-  // 如果是重试，重置状态
-  if (showResult.value && !isCorrect.value) {
-    resetState()
+const handleConfirmOrRetry = (wIdx) => {
+  const r = rounds.value[wIdx]
+  if (r.showResult && !isCorrectFor(wIdx)) {
+    resetState(wIdx)
     return
   }
-  
-  // 否则执行确认逻辑
-  handleConfirm()
+
+  handleConfirm(wIdx)
 }
 
 // 处理确认按钮点击
-const handleConfirm = () => {
-  if (!userInput.value.trim()) {
+const handleConfirm = (wIdx) => {
+  const r = rounds.value[wIdx]
+  const word = wordList.value[wIdx]
+  if (!r.userInput.trim()) {
     uni.showToast({
       title: '请输入英文单词',
-      icon: 'none'
+      icon: 'none',
     })
     return
   }
-  
-  showResult.value = true
-  
-  // 如果是第一次且拼写正确，标记为通过
-  if (isFirstAttempt.value && isCorrect.value) {
-    currentWord.value.passed = true
+
+  r.showResult = true
+
+  if (r.isFirstAttempt && isCorrectFor(wIdx)) {
+    word.passed = true
   }
 }
 
@@ -120,11 +123,13 @@ const handlePrev = () => {
   goNextUnpassed('backward')
 }
 
-// 重置状态
-const resetState = () => {
-  userInput.value = ''
-  showResult.value = false
-  isFirstAttempt.value = true
+// 重置某一题的状态（重试）
+const resetState = (wIdx) => {
+  rounds.value[wIdx] = {
+    userInput: '',
+    showResult: false,
+    isFirstAttempt: true,
+  }
 }
 
 // 监听轮播变化（手动左右滑动）
@@ -134,29 +139,27 @@ const onSwiperChange = (e) => {
     isProgrammaticChange.value = false
     return
   }
-  
+
   const newIndex = e.detail.current
   const oldIndex = currentIndex.value
   let targetIndex = -1
 
-  if (!wordList.value[newIndex].passed){
+  if (!wordList.value[newIndex].passed) {
     currentIndex.value = newIndex
-  }else {
-    // 判断滑动方向
+  } else {
     if (newIndex < oldIndex) {
       targetIndex = findBackwardIndex(newIndex)
-    }else {
+    } else {
       targetIndex = findForwardIndex(newIndex)
     }
-    // 如果找到目标索引，则切换到目标索引，否则保持在当前索引
     if (targetIndex !== -1) {
       currentIndex.value = targetIndex
     } else {
       currentIndex.value = newIndex
     }
   }
-  
-  resetState()
+
+  // 每题状态在 rounds[wIdx] 中独立保存，切换时不清空，避免离屏页与当前页绑同一数据
 }
 
 // 前往下一个未通过的单词的索引
@@ -172,7 +175,6 @@ const goNextUnpassed = (direction = 'forward') => {
   if (targetIndex !== -1) {
     isProgrammaticChange.value = true
     currentIndex.value = targetIndex
-    resetState()
   } else {
     uni.showToast({
       title: '没有未通过的单词了',
@@ -213,7 +215,6 @@ const findBackwardIndex = (startIndex) => {
 const handleIndicatorClick = (index) => {
   isProgrammaticChange.value = true
   currentIndex.value = index
-  resetState()
 }
 
 </script>
@@ -243,22 +244,22 @@ const handleIndicatorClick = (index) => {
             <!-- 英文拼写区 -->
             <view class="en-box">
               <!-- 未通过状态：显示输入框或对比结果 -->
-              <template v-if="!currentWord.passed">
+              <template v-if="!word.passed">
                 <!-- 输入框 -->
                 <input 
-                  v-if="!showResult"
-                  v-model="userInput" 
+                  v-if="!rounds[index].showResult"
+                  v-model="rounds[index].userInput" 
                   class="en-input" 
                   type="text" 
                   placeholder="请输入英文单词"
-                  @confirm="handleConfirm"
+                  @confirm="handleConfirm(index)"
                 />
                 
                 <!-- 对比结果（错误时显示在输入框位置） -->
-                <view v-else-if="showResult && !isCorrect && compareResult" class="result-container">
+                <view v-else-if="rounds[index].showResult && !isCorrectFor(index) && getCompareResult(index)" class="result-container">
                   <view class="result-box">
                     <text 
-                      v-for="(item, idx) in compareResult" 
+                      v-for="(item, idx) in getCompareResult(index)" 
                       :key="idx"
                       class="result-char"
                       :class="item.status"
@@ -268,20 +269,20 @@ const handleIndicatorClick = (index) => {
                   </view>
                   <!-- 正确答案提示 -->
                   <view class="correct-answer">
-                    <text class="answer-text">{{ currentWord.en }}</text>
+                    <text class="answer-text">{{ word.en }}</text>
                   </view>
                 </view>
                 
                 <!-- 正确答案展示（正确时显示） -->
-                <view v-else-if="showResult && isCorrect" class="correct-answer">
-                  <text class="answer-text">{{ currentWord.en }}</text>
+                <view v-else-if="rounds[index].showResult && isCorrectFor(index)" class="correct-answer">
+                  <text class="answer-text">{{ word.en }}</text>
                 </view>
               </template>
               
               <!-- 已通过状态：只展示正确的英文 -->
               <template v-else>
                 <view class="correct-answer">
-                  <text class="answer-text">{{ currentWord.en }}</text>
+                  <text class="answer-text">{{ word.en }}</text>
                 </view>
               </template>
             </view>
@@ -290,13 +291,13 @@ const handleIndicatorClick = (index) => {
           <view class="btn-box"> 
             <!-- 确认/重试按钮 -->
             <button 
-              v-if="!currentWord.passed"
+              v-if="!word.passed"
               class="confirm-btn" 
-              :class="{ 'correct': showResult && isCorrect, 'wrong': showResult && !isCorrect }"
-              @click="handleConfirmOrRetry"
+              :class="{ 'correct': rounds[index].showResult && isCorrectFor(index), 'wrong': rounds[index].showResult && !isCorrectFor(index) }"
+              @click="handleConfirmOrRetry(index)"
             >
-              <text v-if="!showResult">确认</text>
-              <text v-else-if="showResult && isCorrect">✓ 正确</text>
+              <text v-if="!rounds[index].showResult">确认</text>
+              <text v-else-if="rounds[index].showResult && isCorrectFor(index)">✓ 正确</text>
               <text v-else>重试</text>
             </button>
             <!-- 下一题按钮 -->

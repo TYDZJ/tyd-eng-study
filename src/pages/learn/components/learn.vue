@@ -7,7 +7,7 @@ import { ref, computed } from 'vue'
  * - 文字区 col：英文 + 中文；未点首轮前不展示中文
  * - 首轮按钮 row space-between：认识 | 不认识
  * - 点任一项后展示中文，按钮区：下一题 | 记错了
- * - 认识 → passed=true；不认识 → passed=false；记错了 → 仅撤销 passed
+ * - 认识 → passed=true；不认识 → passed=false；记错了 → 仅撤销「认识」带来的 passed（首轮点「不认识」后不展示记错了）
  * - 再次进入未通过题时 resetRoundIfNotPassed 清空 revealed
  */
 const wordList = ref([
@@ -226,13 +226,15 @@ const showNextForPane = (pane) => {
               </button>
             </view>
 
-            <!-- 展开后：下一题 | 记错了（仅当前可见槽） -->
+            <!-- 展开后：仅「认识」时显示 记错了；「不认识」仅下一题 -->
             <view
               v-else-if="showNextForPane(pane)"
               class="btn-row"
+              :class="{ 'btn-row--next-only': !wordList[slotWordIndex[pane]].passed }"
             >
               <button class="btn-item btn-next" @click="handleNext">下一题</button>
               <button
+                v-if="wordList[slotWordIndex[pane]].passed"
                 class="btn-item btn-mistake"
                 @click="onMistake(pane, slotWordIndex[pane])"
               >
@@ -313,6 +315,12 @@ const showNextForPane = (pane) => {
   align-items: center;
   gap: 24rpx;
   flex-shrink: 0;
+
+  /* 仅下一题时占满一行 */
+  &--next-only .btn-next {
+    flex: 1;
+    max-width: 100%;
+  }
 }
 
 .btn-item {
