@@ -6,7 +6,7 @@ import { WX_CLOUD_ENV_ID } from "./config/wx-cloud.js";
 export default {
 	onLaunch: function () {
 		// #ifdef MP-WEIXIN
-		if (typeof wx !== "undefined" && wx.cloud && false) {
+		if (typeof wx !== "undefined" && wx.cloud && true) {
 			wx.cloud.init({
 				env: WX_CLOUD_ENV_ID,
 				traceUser: true,
