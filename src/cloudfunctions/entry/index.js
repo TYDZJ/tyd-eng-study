@@ -1,85 +1,72 @@
 const cloud = require("wx-server-sdk");
+const { CODE, MESSAGE } = require("./lib/constants");
+const { fail } = require("./lib/response");
+const { requireAuth } = require("./lib/auth");
+const authHandlers = require("./handlers/auth");
+const learnHandlers = require("./handlers/learn");
 
 cloud.init({
-	env: cloud.DYNAMIC_CURRENT_ENV,
+  env: cloud.DYNAMIC_CURRENT_ENV,
 });
 
 const db = cloud.database();
 const _ = db.command;
 
-async function getLearnWords(event, wxContext) {
-	// 测试模式：进入学习页时仅拉取词书前 N 个词，不依赖用户进度表。
-	// 后续接正式学习流程时，可恢复 user_book_progress 的 current_seq 游标逻辑。
-	const bookId = String(event.book_id || "cet4");
-	const count = Math.min(40, Math.max(1, Number(event.count) || 20));
-	// 仅用于返回给前端展示，便于未来切换到进度驱动时保持字段兼容。
-	const currentSeq = 0;
+const actionMap = {
+  wxQuickLogin: authHandlers.wxQuickLogin,
+  passwordRegister: authHandlers.passwordRegister,
+  passwordLogin: authHandlers.passwordLogin,
+  setPassword: authHandlers.setPassword,
+  resetPasswordByWechat: authHandlers.resetPasswordByWechat,
+  getAuthProfile: authHandlers.getAuthProfile,
+  logout: authHandlers.logout,
+  getLearnWords: learnHandlers.getLearnWords,
+};
 
-	const bookWordsRes = await db
-		.collection("book_words")
-		.where({
-			book_id: bookId,
-			seq: _.gt(0),
-		})
-		.orderBy("seq", "asc")
-		.limit(count)
-		.get();
-
-	const bookWords = bookWordsRes.data || [];
-	const wordIds = bookWords.map((row) => row.word_id);
-	if (wordIds.length === 0) {
-		return {
-			code: 0,
-			message: "ok",
-			data: {
-				book_id: bookId,
-				current_seq: currentSeq,
-				words: [],
-			},
-		};
-	}
-
-	const wordsRes = await db
-		.collection("words")
-		.where({
-			_id: _.in(wordIds),
-		})
-		.get();
-
-	// where + in 查询返回顺序不保证与 wordIds 一致，需按 book_words 顺序重排。
-	const wordsMap = new Map((wordsRes.data || []).map((w) => [w._id, w]));
-	const words = bookWords
-		.map((row) => wordsMap.get(row.word_id))
-		.filter(Boolean);
-
-	return {
-		code: 0,
-		message: "ok",
-		data: {
-			book_id: bookId,
-			current_seq: currentSeq,
-			words,
-		},
-	};
-}
+const publicActions = new Set([
+  "wxQuickLogin",
+  "passwordRegister",
+  "passwordLogin",
+  "resetPasswordByWechat",
+]);
 
 /**
- * 云函数入口：可按 event.action 做简单路由，或拆分为多个云函数
- * @param {object} event 小程序 callFunction 传入的 data
- * @param {object} context 调用上下文
+ * 云函数统一入口：通过 action 分发并保持统一返回结构
+ * @param {object} event 小程序 callFunction 传入 data
  */
-exports.main = async (event, context) => {
-	const wxContext = cloud.getWXContext();
-	const action = event && event.action;
+exports.main = async (event = {}) => {
+  try {
+    const wxContext = cloud.getWXContext();
+    const action = String(event.action || "").trim();
+    const handler = actionMap[action];
 
-	if (action === "getLearnWords") {
-		return getLearnWords(event, wxContext);
-	}
+    if (!action || !handler) {
+      return fail(CODE.BAD_REQUEST, "未知 action");
+    }
 
-	return {
-		errMsg: "ok",
-		openid: wxContext.OPENID,
-		appid: wxContext.APPID,
-		event,
-	};
+    const context = {
+      db,
+      _,
+      event,
+      wxContext,
+      auth: null,
+    };
+
+    if (!publicActions.has(action)) {
+      const authResult = await requireAuth({
+        db,
+        _,
+        event,
+      });
+      if (!authResult.ok) {
+        return fail(authResult.error.code, authResult.error.message);
+      }
+      context.auth = authResult;
+    }
+
+    return await handler(context);
+  } catch (error) {
+    console.error("[entry] unexpected error:", error);
+    return fail(CODE.INTERNAL_ERROR, MESSAGE.INTERNAL_ERROR);
+  }
 };

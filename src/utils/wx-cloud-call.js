@@ -7,10 +7,10 @@
  * @param {Record<string, unknown>} [data]
  */
 export function callEntryCloud(data = {}) {
-	return wx.cloud.callFunction({
-		name: "entry",
-		data,
-	});
+  return wx.cloud.callFunction({
+    name: "entry",
+    data,
+  });
 }
 
 /**
@@ -18,22 +18,22 @@ export function callEntryCloud(data = {}) {
  * @param {{ bookId?: string; count?: number }} [params]
  */
 export async function getLearnWords(params = {}) {
-	const { bookId = "cet4", count = 20 } = params;
-	const res = await callEntryCloud({
-		action: "getLearnWords",
-		book_id: bookId,
-		count,
-	});
-	return res?.result;
+  const { bookId = "cet4", count = 20 } = params;
+  const res = await callEntryCloud({
+    action: "getLearnWords",
+    book_id: bookId,
+    count,
+  });
+  return res?.result;
 }
 // #endif
 
 // #ifndef MP-WEIXIN
 export function callEntryCloud() {
-	return Promise.reject(new Error("callEntryCloud 仅支持微信小程序"));
+  return Promise.reject(new Error("callEntryCloud 仅支持微信小程序"));
 }
 
 export function getLearnWords() {
-	return Promise.reject(new Error("getLearnWords 仅支持微信小程序"));
+  return Promise.reject(new Error("getLearnWords 仅支持微信小程序"));
 }
 // #endif

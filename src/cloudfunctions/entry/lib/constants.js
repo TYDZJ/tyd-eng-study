@@ -1,0 +1,28 @@
+"use strict";
+
+const CODE = {
+  OK: 0,
+  BAD_REQUEST: 40001,
+  INVALID_CREDENTIALS: 40002,
+  UNAUTHORIZED: 40101,
+  USER_NOT_FOUND: 40401,
+  WECHAT_ALREADY_BOUND: 40901,
+  USERNAME_ALREADY_EXISTS: 40902,
+  INTERNAL_ERROR: 50001,
+};
+
+const MESSAGE = {
+  OK: "ok",
+  BAD_REQUEST: "参数错误",
+  INVALID_CREDENTIALS: "用户名或密码错误",
+  UNAUTHORIZED: "请先登录",
+  USER_NOT_FOUND: "用户不存在",
+  WECHAT_ALREADY_BOUND: "当前微信已绑定其他账号",
+  USERNAME_ALREADY_EXISTS: "用户名已存在",
+  INTERNAL_ERROR: "服务异常",
+};
+
+module.exports = {
+  CODE,
+  MESSAGE,
+};
