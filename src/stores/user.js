@@ -43,6 +43,11 @@ export const useUserStore = defineStore(
       profile.value = null;
     }
 
+    // 退出登录：清空所有认证数据
+    function logout() {
+      clearAuth();
+    }
+
     return {
       sessionToken,
       profile,
@@ -52,6 +57,7 @@ export const useUserStore = defineStore(
       setProfile,
       setAuthInfo,
       clearAuth,
+      logout,
     };
   },
   {

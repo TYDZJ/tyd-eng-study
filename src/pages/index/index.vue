@@ -36,7 +36,7 @@ const goPage = (url) => {
 
 <template>
   <view class="page-box">
-    <TopNav :showBack="false" showSideNav="true" />
+    <TopNav :showBack="false" :showSideNav="true" />
     <!-- 签到 -->
     <view class="sign-box">
       <!-- <view class="icon"></view> -->
@@ -67,7 +67,7 @@ const goPage = (url) => {
     <LoginPopup
       :show="showLoginPopup"
       @close="showLoginPopup = false"
-      @success="handleLoginSuccess"
+      @success="showLoginPopup = false"
     />
   </view>
 </template>
