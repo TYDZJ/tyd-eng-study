@@ -1,0 +1,52 @@
+必建集合
+1) users
+用于账号主体（游客/账号用户都在这里）
+
+建议字段：
+
+user_id: string，系统内部唯一ID（如 u_xxx）
+username: string，账号名；游客可空字符串
+password_hash: string，密码哈希；游客可空字符串
+user_type: string，guest | account
+created_at: Date
+updated_at: Date
+示例文档：
+
+{
+  "user_id": "u_1713160000000_ab12cd34",
+  "username": "tom",
+  "password_hash": "scrypt$xxxx$xxxx",
+  "user_type": "account",
+  "created_at": "2026-04-15T08:00:00.000Z",
+  "updated_at": "2026-04-15T08:00:00.000Z"
+}
+2) wx_bindings
+微信身份绑定关系（你的一微信号一账号规则在这里落地）
+
+建议字段：
+
+openid: string
+user_id: string
+created_at: Date
+updated_at: Date
+示例：
+
+{
+  "openid": "oAbc123xxx",
+  "user_id": "u_1713160000000_ab12cd34",
+  "created_at": "2026-04-15T08:01:00.000Z",
+  "updated_at": "2026-04-15T08:01:00.000Z"
+}
+3) auth_sessions
+登录会话（前端存的 session_token 对应这里）
+
+建议字段：
+
+session_token: string
+user_id: string
+openid: string（密码登录时可空）
+login_type: string（wechat | password | password_register）
+revoked: boolean
+created_at: Date
+updated_at: Date
+expire_at: Date
