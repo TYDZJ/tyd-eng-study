@@ -1,5 +1,20 @@
 <script setup>
-import TopNav from '@/components/top-nav.vue'
+import { ref } from "vue";
+import TopNav from "@/components/top-nav.vue";
+import LoginPopup from "@/components/login-popup.vue";
+import { useUserStore } from "@/stores/user";
+
+const userStore = useUserStore();
+const showLoginPopup = ref(false);
+
+const ensureLogin = (callback) => {
+  // Learn/Review 入口统一走登录门禁：未登录只弹窗，不执行后续跳转。
+  if (!userStore.isLoggedIn) {
+    showLoginPopup.value = true;
+    return;
+  }
+  callback();
+};
 
 const goLearn = () => {
   uni.navigateTo({
@@ -32,12 +47,12 @@ const goPage = (url) => {
 
     <view class="learn-box">
       <!-- learn -->
-      <view class="learn-item" @click="goLearn()">
+      <view class="learn-item" @click="ensureLogin(goLearn)">
         <text class="title">Learn</text>
         <text class="count">100</text>
       </view>
       <!-- review -->
-      <view class="learn-item" @click="goReview()">
+      <view class="learn-item" @click="ensureLogin(goReview)">
         <text class="title">Review</text>
         <text class="count">50</text>
       </view>
@@ -49,6 +64,11 @@ const goPage = (url) => {
       <view class="btn" @click="goPage('/pages/data/index')">数据</view>
       <view class="btn" @click="goPage('/pages/mine/index')">我的</view>
     </view>
+    <LoginPopup
+      :show="showLoginPopup"
+      @close="showLoginPopup = false"
+      @success="handleLoginSuccess"
+    />
   </view>
 </template>
 

@@ -85,6 +85,7 @@ async function wxQuickLogin({ db, wxContext }) {
   if (binding) {
     user = await getUserByUserId(db, binding.user_id);
   } else {
+    // 首次微信登录：创建 guest 用户并绑定当前 openid。
     user = await createUser(db, {
       userType: "guest",
     });
@@ -123,6 +124,7 @@ async function passwordRegister({ db, event, wxContext }) {
 
   const bound = await getBindingByOpenId(db, openid);
   if (bound) {
+    // 业务规则：一个微信号只能绑定一个账号。
     return fail(CODE.WECHAT_ALREADY_BOUND, MESSAGE.WECHAT_ALREADY_BOUND);
   }
 
@@ -171,6 +173,7 @@ async function passwordLogin({ db, event }) {
 
   const session = await createSession(db, {
     userId: user.user_id,
+    // 用户名密码登录不依赖当前微信身份，openid 置空即可。
     openid: "",
     loginType: "password",
   });
@@ -217,6 +220,7 @@ async function resetPasswordByWechat({ db, event, wxContext }) {
     return fail(CODE.USER_NOT_FOUND, MESSAGE.USER_NOT_FOUND);
   }
 
+  // 仅允许已绑定账号（有 username）的用户通过微信身份重置密码。
   const user = await getUserByUserId(db, binding.user_id);
   if (!user || !user.username) {
     return fail(CODE.USER_NOT_FOUND, MESSAGE.USER_NOT_FOUND);

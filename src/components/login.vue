@@ -1,31 +1,41 @@
 <script setup>
+import { callEntryCloud } from "@/utils/wx-cloud-call";
+import { useUserStore } from "@/stores/user";
 
 const emit = defineEmits(['success'])
+const userStore = useUserStore();
 /**
  * 根据openId一键登录/注册
  */
-const onQuickLogin = async () => { 
-  console.log('一键登录');
+const onQuickLogin = async () => {
   uni.showLoading({
     title: 'Loading...'
   })
-  
+
   try {
-    // TODO: 调用微信登录接口
-    
-    // 模拟登录成功
-    setTimeout(() => {
-      emit('success')
-      uni.hideLoading()
-    }, 1000)
+    const res = await callEntryCloud({
+      action: "wxQuickLogin",
+    });
+    const result = res?.result || {};
+
+    if (result.code !== 0) {
+      throw new Error(result.message || "登录失败");
+    }
+
+    userStore.setAuthInfo(result?.data || {});
+    if (!userStore.checkIsLoggedIn()) {
+      throw new Error("登录失败：未获取到会话信息");
+    }
+    emit("success");
   } catch (error) {
     console.error('登录失败:', error)
-    uni.hideLoading()
     uni.showToast({
-      title: '登录失败',
+      title: error?.message || '登录失败',
       icon: 'error',
       duration: 2000
     })
+  } finally {
+    uni.hideLoading()
   }
 }
 </script>
@@ -37,6 +47,18 @@ const onQuickLogin = async () => {
       @click="onQuickLogin"
     >
       微信一键登录
+    </button>
+    <button
+      class="login-btn"
+      @click=""
+    >
+      账户密码登录
+    </button>
+    <button
+      class="login-btn"
+      @click=""
+    >
+      注册
     </button>
   </view>
 </template>

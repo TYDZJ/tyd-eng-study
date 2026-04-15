@@ -23,6 +23,7 @@ const actionMap = {
   getLearnWords: learnHandlers.getLearnWords,
 };
 
+// 白名单 action：不需要 session_token 也可调用。
 const publicActions = new Set([
   "wxQuickLogin",
   "passwordRegister",
@@ -53,6 +54,7 @@ exports.main = async (event = {}) => {
     };
 
     if (!publicActions.has(action)) {
+      // 受保护 action 统一在入口层鉴权，失败返回 40101 供前端统一处理。
       const authResult = await requireAuth({
         db,
         _,
