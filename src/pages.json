@@ -27,7 +27,25 @@
 			}
 		},
 		{
+			"path": "pages/mine/update",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/word-detail/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/setting/index",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/setting/learn",
 			"style": {
 				"navigationStyle": "custom"
 			}

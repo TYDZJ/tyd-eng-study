@@ -25,6 +25,17 @@ const handleClick = () => {
   }
 }
 
+// 跳转到个人信息页
+const goToProfile = () => {
+  if (!isLoggedIn.value) {
+    openLoginPopup();
+    return;
+  }
+  uni.navigateTo({
+    url: '/pages/mine/update'
+  });
+}
+
 // 退出登录
 const handleLogout = () => {
   uni.showModal({
@@ -42,11 +53,31 @@ const handleLogout = () => {
   });
 }
 
+// 处理菜单项点击
+const handleMenuClick = (item) => {
+  // 如果没有配置url，执行默认点击逻辑（未登录时弹出登录框）
+  if (!item.url) {
+    handleClick();
+    return;
+  }
+  
+  // 检查登录状态
+  if (!isLoggedIn.value) {
+    openLoginPopup();
+    return;
+  }
+  
+  // 跳转到对应页面
+  uni.navigateTo({
+    url: item.url
+  });
+}
+
 // 功能菜单项
 const menuItems = [
-  { icon: '📊', name: '数据' },
-  { icon: '⚙️', name: '学习设置' },
-  { icon: '⚙️', name: '更多设置' }
+  { icon: '📊', name: '数据', url: '' },
+  { icon: '⚙️', name: '学习设置', url: '/pages/setting/learn' },
+  { icon: '⚙️', name: '更多设置', url: '/pages/setting/index' }
 ];
 
 </script>
@@ -57,7 +88,7 @@ const menuItems = [
     
     <view class="content">
       <!-- 头像区域 -->
-      <view class="avatar-section" @click="handleClick">
+      <view class="avatar-section" @click="goToProfile">
         <image 
           class="avatar" 
           :src="userInfo.avatar" 
@@ -72,7 +103,7 @@ const menuItems = [
           v-for="(item, index) in menuItems" 
           :key="index"
           class="menu-item"
-          @click="handleClick"
+          @click="handleMenuClick(item)"
         >
           <view class="menu-left">
             <text class="menu-icon">{{ item.icon }}</text>
