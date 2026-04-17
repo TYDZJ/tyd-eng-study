@@ -94,7 +94,7 @@ const menuItems = [
           :src="userInfo.avatar" 
           mode="aspectFill"
         ></image>
-        <text class="nickname">{{ userInfo.nickname || '默认名称' }}</text>
+        <text class="nickname">{{ userInfo.nickname || '匿名用户' }}</text>
       </view>
 
       <!-- 功能区 -->

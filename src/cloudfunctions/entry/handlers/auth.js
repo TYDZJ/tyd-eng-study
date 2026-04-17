@@ -10,6 +10,7 @@ function sanitizeUser(user) {
   return {
     user_id: user.user_id,
     username: user.username || "",
+    nickname: user.nickname || user.username || "", // 优先使用nickname，如果没有则回退到username
     user_type: user.user_type || "guest",
     created_at: user.created_at || null,
   };
@@ -66,7 +67,8 @@ async function createUser(db, payload) {
   const userId = makeUserId();
   const data = {
     user_id: userId,
-    username: payload.username || "",
+    username: payload.username || "", // 账户名，唯一且不可重复
+    nickname: payload.nickname || payload.username || "", // 昵称，可重复，默认为username
     password_hash: payload.passwordHash || "",
     user_type: payload.userType || "guest",
     created_at: now,
@@ -204,7 +206,7 @@ async function setPassword({ db, auth, event }) {
   if (!assertPassword(password)) {
     return fail(CODE.BAD_REQUEST, MESSAGE.BAD_REQUEST);
   }
-  // setPassword 仅用于“首次设置密码”，已有密码必须走 changePassword。
+  // setPassword 仅用于"首次设置密码"，已有密码必须走 changePassword。
   if (auth.user.password_hash) {
     return fail(CODE.PASSWORD_ALREADY_SET, MESSAGE.PASSWORD_ALREADY_SET);
   }
@@ -217,6 +219,7 @@ async function setPassword({ db, auth, event }) {
     .update({
       data: {
         password_hash: hashPassword(password),
+        user_type: "account", // 设置密码后，将用户类型改为 account
         updated_at: new Date(),
       },
     });
@@ -225,6 +228,7 @@ async function setPassword({ db, auth, event }) {
     user_id: auth.user.user_id,
     changed: true,
     has_password: true,
+    user_type: "account",
   });
 }
 
@@ -254,6 +258,7 @@ async function changePassword({ db, auth, event }) {
     .update({
       data: {
         password_hash: hashPassword(newPassword),
+        user_type: "account", // 确保用户类型为 account
         updated_at: new Date(),
       },
     });
@@ -262,6 +267,7 @@ async function changePassword({ db, auth, event }) {
     user_id: auth.user.user_id,
     changed: true,
     has_password: true,
+    user_type: "account",
   });
 }
 
@@ -293,6 +299,7 @@ async function resetPasswordByWechat({ db, event, wxContext }) {
     .update({
       data: {
         password_hash: hashPassword(password),
+        user_type: "account", // 重置密码后，确保用户类型为 account
         updated_at: new Date(),
       },
     });
@@ -300,6 +307,7 @@ async function resetPasswordByWechat({ db, event, wxContext }) {
   return ok({
     user_id: user.user_id,
     reset: true,
+    user_type: "account",
   });
 }
 
@@ -336,6 +344,79 @@ async function logout({ db, auth }) {
   });
 }
 
+async function updateNickname({ db, auth, event }) {
+  const nickname = String(pickEventField(event, ["nickname"])).trim();
+  
+  // 验证昵称不能为空
+  if (!nickname) {
+    return fail(CODE.BAD_REQUEST, "昵称不能为空");
+  }
+
+  // 验证昵称长度（可选，根据业务需求调整）
+  if (nickname.length > 50) {
+    return fail(CODE.BAD_REQUEST, "昵称长度不能超过50个字符");
+  }
+
+  // 更新用户昵称（新增nickname字段，不影响username账户名）
+  await db
+    .collection("users")
+    .where({
+      user_id: auth.user.user_id,
+    })
+    .update({
+      data: {
+        nickname: nickname,
+        updated_at: new Date(),
+      },
+    });
+
+  return ok({
+    user_id: auth.user.user_id,
+    nickname: nickname,
+    updated: true,
+  });
+}
+
+async function updateUsername({ db, auth, event }) {
+  const newUsername = String(pickEventField(event, ["username"])).trim().toLowerCase();
+  
+  // 验证账号名称不能为空
+  if (!newUsername) {
+    return fail(CODE.BAD_REQUEST, "账号名称不能为空");
+  }
+
+  // 验证账号名称格式：只能包含字母、数字、下划线，长度6-20位
+  const usernameRegex = /^[a-zA-Z0-9_]{6,20}$/;
+  if (!usernameRegex.test(newUsername)) {
+    return fail(CODE.BAD_REQUEST, "账号名称只能包含字母、数字、下划线，长度6-20位");
+  }
+
+  // 检查账号名称是否已被其他用户使用
+  const existingUser = await getUserByUsername(db, newUsername);
+  if (existingUser && existingUser.user_id !== auth.user.user_id) {
+    return fail(CODE.USERNAME_ALREADY_EXISTS, "账号名称已被使用");
+  }
+
+  // 更新用户账号名称
+  await db
+    .collection("users")
+    .where({
+      user_id: auth.user.user_id,
+    })
+    .update({
+      data: {
+        username: newUsername,
+        updated_at: new Date(),
+      },
+    });
+
+  return ok({
+    user_id: auth.user.user_id,
+    username: newUsername,
+    updated: true,
+  });
+}
+
 module.exports = {
   wxQuickLogin,
   passwordRegister,
@@ -345,4 +426,6 @@ module.exports = {
   resetPasswordByWechat,
   getAuthProfile,
   logout,
+  updateNickname,
+  updateUsername,
 };

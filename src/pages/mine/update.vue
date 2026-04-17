@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import TopNav from '@/components/top-nav.vue'
 import { useUserStore } from '@/stores/user'
 import { callEntryCloud } from '@/utils/wx-cloud-call'
@@ -9,10 +9,13 @@ const userStore = useUserStore()
 // 用户信息显示状态
 const isEditingNickname = ref(false)
 const nickname = ref('')
+const isEditingUsername = ref(false)
+const username = ref('')
 
 // 密码相关
 const showPasswordPopup = ref(false)
 const passwordMode = ref('change') // 'reset' 重置密码, 'change' 修改密码, 'set' 设置密码
+const hasPassword = ref(false) // 从后端获取的是否有密码状态
 const passwordForm = ref({
   oldPassword: '',
   password: '',
@@ -22,28 +25,60 @@ const showOldPassword = ref(false)
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 
-// 判断用户是否已设置密码：优先使用后端 has_password，兼容老数据回退到账号类型判断。
-const hasPassword = computed(() => {
-  const profile = userStore.profile || {}
-  if (typeof profile.has_password === 'boolean') {
-    return profile.has_password
-  }
-  return Boolean(profile.user_type === 'account' && profile.username)
+// 页面加载时获取用户信息（包括是否有密码）
+onMounted(async () => {
+  uni.showLoading({ title: '加载中...' })
+  await fetchUserProfile()
+  uni.hideLoading()
 })
 
-// 计算属性：显示的用户名
+// 获取用户资料（包含has_password字段）
+const fetchUserProfile = async () => {
+  try {
+    const res = await callEntryCloud({
+      action: "getAuthProfile"
+    })
+    
+    const result = res?.result || {}
+    if (result.code === 0 && result.data) {
+      // 更新本地store中的profile
+      if (result.data.user) {
+        userStore.profile = {
+          ...userStore.profile,
+          ...result.data.user,
+          has_password: result.data.has_password
+        }
+      }
+      // 更新hasPassword状态
+      hasPassword.value = result.data.has_password || false
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+  }
+}
+
+// 计算属性：显示的昵称
 const displayName = computed(() => {
   const profile = userStore.profile
-  if (!profile || !profile.username) {
+  if (!profile) {
     return '匿名用户'
   }
-  return profile.username
+  // 优先使用nickname，如果没有则使用username（账户名）
+  return profile.nickname || profile.username || '匿名用户'
 })
 
 // 开始编辑昵称
 const startEditNickname = () => {
-  nickname.value = displayName.value === '匿名用户' ? '' : displayName.value
+  const profile = userStore.profile
+  nickname.value = profile?.nickname || profile?.username || ''
   isEditingNickname.value = true
+}
+
+// 开始编辑账号名称
+const startEditUsername = () => {
+  const profile = userStore.profile
+  username.value = profile?.username || ''
+  isEditingUsername.value = true
 }
 
 // 保存昵称
@@ -61,20 +96,85 @@ const saveNickname = async () => {
   })
 
   try {
-    // TODO: 调用后端接口更新昵称
-    // const res = await callEntryCloud({
-    //   action: "updateNickname",
-    //   data: {
-    //     nickname: nickname.value.trim()
-    //   }
-    // })
+    // 调用后端接口更新昵称
+    const res = await callEntryCloud({
+      action: "updateNickname",
+      nickname: nickname.value.trim()
+    })
     
-    // 暂时更新本地store
+    const result = res?.result || {}
+    if (result.code !== 0) {
+      throw new Error(result.message || '保存失败')
+    }
+    
+    // 更新本地store，只更新nickname字段，不影响username（账户名）
     if (userStore.profile) {
-      userStore.profile.username = nickname.value.trim()
+      userStore.profile.nickname = nickname.value.trim()
     }
     
     isEditingNickname.value = false
+    
+    uni.showToast({
+      title: '保存成功',
+      icon: 'success'
+    })
+  } catch (error) {
+    console.error('保存失败:', error)
+    uni.showToast({
+      title: error?.message || '保存失败',
+      icon: 'error'
+    })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+// 保存账号名称
+const saveUsername = async () => {
+  if (!username.value.trim()) {
+    uni.showToast({
+      title: '请输入账号名称',
+      icon: 'none'
+    })
+    return
+  }
+
+  // 验证账号名称格式（只能包含字母、数字、下划线，6-20位）
+  const usernameRegex = /^[a-zA-Z0-9_]{6,20}$/
+  if (!usernameRegex.test(username.value.trim())) {
+    uni.showToast({
+      title: '账号名称只能包含字母、数字、下划线，长度6-20位',
+      icon: 'none'
+    })
+    return
+  }
+
+  uni.showLoading({
+    title: '保存中...'
+  })
+
+  try {
+    // 调用后端接口更新账号名称
+    const res = await callEntryCloud({
+      action: "updateUsername",
+      username: username.value.trim()
+    })
+    
+    const result = res?.result || {}
+    if (result.code !== 0) {
+      throw new Error(result.message || '保存失败')
+    }
+    
+    // 更新本地store
+    if (userStore.profile) {
+      userStore.profile.username = username.value.trim()
+      // 如果nickname为空，也更新为新的username
+      if (!userStore.profile.nickname) {
+        userStore.profile.nickname = username.value.trim()
+      }
+    }
+    
+    isEditingUsername.value = false
     
     uni.showToast({
       title: '保存成功',
@@ -97,10 +197,27 @@ const cancelEditNickname = () => {
   nickname.value = ''
 }
 
+// 取消编辑账号名称
+const cancelEditUsername = () => {
+  isEditingUsername.value = false
+  username.value = ''
+}
+
 // 打开修改密码弹窗
 const openPasswordPopup = () => {
+  // 检查是否已设置账号名称
+  const profile = userStore.profile
+  if (!profile?.username) {
+    uni.showToast({
+      title: '请先设置账号名称',
+      icon: 'none'
+    })
+    return
+  }
+  
   // 根据用户是否有密码决定默认模式
   passwordMode.value = hasPassword.value ? 'change' : 'set'
+  // console.log('openPasswordPopup', passwordMode.value)
   passwordForm.value = {
     oldPassword: '',
     password: '',
@@ -225,9 +342,12 @@ const onSavePassword = async () => {
       icon: 'success'
     })
 
+    // 更新本地store：设置has_password和user_type
     if (userStore.profile) {
       userStore.profile.has_password = true
+      userStore.profile.user_type = 'account' // 设置密码后，用户类型变为 account
     }
+    hasPassword.value = true
     
     closePasswordPopup()
   } catch (error) {
@@ -255,8 +375,9 @@ const onSavePassword = async () => {
       <!-- 账号昵称 -->
       <view class="update-item">
         <view class="item-left">
-          <text class="label">账号昵称：</text>
+          
           <view v-if="!isEditingNickname" class="value-display">
+            <text class="label">账号昵称：</text>
             <text>{{ displayName }}</text>
           </view>
           <view v-else class="value-input">
@@ -277,6 +398,38 @@ const onSavePassword = async () => {
               <text>取消</text>
             </view>
             <view class="action-btn save" @click="saveNickname">
+              <text>保存</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 账号名称 -->
+      <view class="update-item">
+        <view class="item-left">
+          
+          <view v-if="!isEditingUsername" class="value-display">
+            <text class="label">账号名称：</text>
+            <text>{{ userStore.profile?.username || '未设置' }}</text>
+          </view>
+          <view v-else class="value-input">
+            <input
+              v-model="username"
+              placeholder="6-20位字母,数字,下划线"
+              placeholder-class="input-placeholder"
+              class="nickname-input"
+            />
+          </view>
+        </view>
+        <view class="item-right">
+          <view v-if="!isEditingUsername" class="action-btn" @click="startEditUsername">
+            <text>{{ userStore.profile?.username ? '修改' : '设置' }}</text>
+          </view>
+          <view v-else class="action-buttons">
+            <view class="action-btn cancel" @click="cancelEditUsername">
+              <text>取消</text>
+            </view>
+            <view class="action-btn save" @click="saveUsername">
               <text>保存</text>
             </view>
           </view>
@@ -451,8 +604,9 @@ const onSavePassword = async () => {
   padding: 10rpx 0;
 }
 
-.input-placeholder {
+::v-deep.input-placeholder {
   color: #999;
+  font-size: 26rpx !important;
 }
 
 .item-right {

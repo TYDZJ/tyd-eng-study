@@ -22,6 +22,8 @@ const actionMap = {
   resetPasswordByWechat: authHandlers.resetPasswordByWechat,
   getAuthProfile: authHandlers.getAuthProfile,
   logout: authHandlers.logout,
+  updateNickname: authHandlers.updateNickname,
+  updateUsername: authHandlers.updateUsername,
   getLearnWords: learnHandlers.getLearnWords,
 };
 
