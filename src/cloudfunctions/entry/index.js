@@ -14,9 +14,11 @@ const _ = db.command;
 
 const actionMap = {
   wxQuickLogin: authHandlers.wxQuickLogin,
+  register: authHandlers.passwordRegister,
   passwordRegister: authHandlers.passwordRegister,
   passwordLogin: authHandlers.passwordLogin,
   setPassword: authHandlers.setPassword,
+  changePassword: authHandlers.changePassword,
   resetPasswordByWechat: authHandlers.resetPasswordByWechat,
   getAuthProfile: authHandlers.getAuthProfile,
   logout: authHandlers.logout,

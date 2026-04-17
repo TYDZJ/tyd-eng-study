@@ -22,13 +22,14 @@ const showOldPassword = ref(false)
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 
-// 判断用户是否已设置密码（通过检查profile中是否有username来判断是否为账户类型用户）
-const hasPassword = ref(true)
-// const hasPassword = computed(() => {
-//   const profile = userStore.profile
-//   // 如果用户类型为account且有username，说明已设置密码
-//   return profile && profile.user_type === 'account' && profile.username
-// })
+// 判断用户是否已设置密码：优先使用后端 has_password，兼容老数据回退到账号类型判断。
+const hasPassword = computed(() => {
+  const profile = userStore.profile || {}
+  if (typeof profile.has_password === 'boolean') {
+    return profile.has_password
+  }
+  return Boolean(profile.user_type === 'account' && profile.username)
+})
 
 // 计算属性：显示的用户名
 const displayName = computed(() => {
@@ -189,29 +190,23 @@ const onSavePassword = async () => {
   try {
     let res
     if (passwordMode.value === 'reset') {
-      // 重置密码模式：通过微信身份验证
+      // 忘记密码：走微信身份重置（公开 action，不依赖 session）。
       res = await callEntryCloud({
         action: "resetPasswordByWechat",
-        data: {
-          password: passwordForm.value.password
-        }
+        password: passwordForm.value.password
       })
     } else if (passwordMode.value === 'set') {
-      // 设置密码模式：首次设置密码（使用register接口或setPassword）
+      // 首次设置密码：仅在当前账号尚未设置密码时成功。
       res = await callEntryCloud({
         action: "setPassword",
-        data: {
-          password: passwordForm.value.password
-        }
+        password: passwordForm.value.password
       })
     } else {
-      // 修改密码模式：需要验证旧密码
+      // 修改密码：必须传 old_password，后端会校验旧密码哈希。
       res = await callEntryCloud({
-        action: "setPassword",
-        data: {
-          oldPassword: passwordForm.value.oldPassword,
-          password: passwordForm.value.password
-        }
+        action: "changePassword",
+        old_password: passwordForm.value.oldPassword,
+        new_password: passwordForm.value.password
       })
     }
     
@@ -229,6 +224,10 @@ const onSavePassword = async () => {
       title: successText,
       icon: 'success'
     })
+
+    if (userStore.profile) {
+      userStore.profile.has_password = true
+    }
     
     closePasswordPopup()
   } catch (error) {
@@ -382,10 +381,6 @@ const onSavePassword = async () => {
           <!-- 切换模式文字（设置密码模式不显示） -->
           <view v-if="passwordMode !== 'set'" class="mode-switch" @click="togglePasswordMode">
             <text>{{ passwordMode === 'reset' ? '修改密码' : '重置密码' }}</text>
-          </view>
-          <!-- 测试，进入到设置密码模式 -->
-          <view class="mode-switch" @click="hasPassword = false">
-            <text>进入设置密码模式</text>
           </view>
         </view>
       </view>

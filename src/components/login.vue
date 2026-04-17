@@ -155,7 +155,7 @@ const onRegister = async () => {
 
   try {
     const res = await callEntryCloud({
-      action: "register",
+      action: "passwordRegister",
       data: {
         username: formData.value.username,
         password: formData.value.password

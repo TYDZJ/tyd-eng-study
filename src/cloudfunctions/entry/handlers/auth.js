@@ -24,6 +24,21 @@ function assertPassword(value) {
   return password.length >= 6 && password.length <= 64;
 }
 
+function pickEventField(event, keys = []) {
+  const payload = event && typeof event === "object" ? event : {};
+  const nestedData =
+    payload.data && typeof payload.data === "object" ? payload.data : {};
+  for (const key of keys) {
+    if (payload[key] !== undefined && payload[key] !== null) {
+      return payload[key];
+    }
+    if (nestedData[key] !== undefined && nestedData[key] !== null) {
+      return nestedData[key];
+    }
+  }
+  return "";
+}
+
 async function getBindingByOpenId(db, openid) {
   const res = await db
     .collection("wx_bindings")
@@ -115,8 +130,8 @@ async function wxQuickLogin({ db, wxContext }) {
 
 async function passwordRegister({ db, event, wxContext }) {
   const openid = String(wxContext.OPENID || "").trim();
-  const username = normalizeUsername(event.username);
-  const password = String(event.password || "");
+  const username = normalizeUsername(pickEventField(event, ["username"]));
+  const password = String(pickEventField(event, ["password"]));
 
   if (!openid || !username || !assertPassword(password)) {
     return fail(CODE.BAD_REQUEST, MESSAGE.BAD_REQUEST);
@@ -157,8 +172,8 @@ async function passwordRegister({ db, event, wxContext }) {
 }
 
 async function passwordLogin({ db, event }) {
-  const username = normalizeUsername(event.username);
-  const password = String(event.password || "");
+  const username = normalizeUsername(pickEventField(event, ["username"]));
+  const password = String(pickEventField(event, ["password"]));
   if (!username || !password) {
     return fail(CODE.BAD_REQUEST, MESSAGE.BAD_REQUEST);
   }
@@ -185,9 +200,13 @@ async function passwordLogin({ db, event }) {
 }
 
 async function setPassword({ db, auth, event }) {
-  const password = String(event.password || "");
+  const password = String(pickEventField(event, ["password", "new_password", "newPassword"]));
   if (!assertPassword(password)) {
     return fail(CODE.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+  }
+  // setPassword 仅用于“首次设置密码”，已有密码必须走 changePassword。
+  if (auth.user.password_hash) {
+    return fail(CODE.PASSWORD_ALREADY_SET, MESSAGE.PASSWORD_ALREADY_SET);
   }
 
   await db
@@ -205,12 +224,52 @@ async function setPassword({ db, auth, event }) {
   return ok({
     user_id: auth.user.user_id,
     changed: true,
+    has_password: true,
+  });
+}
+
+async function changePassword({ db, auth, event }) {
+  const oldPassword = String(
+    pickEventField(event, ["old_password", "oldPassword"])
+  );
+  const newPassword = String(
+    pickEventField(event, ["new_password", "newPassword", "password"])
+  );
+  if (!oldPassword || !assertPassword(newPassword)) {
+    return fail(CODE.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+  }
+  if (!auth.user.password_hash) {
+    return fail(CODE.BAD_REQUEST, "请先设置密码");
+  }
+  // 修改密码必须先验旧密码，防止拿到会话后直接无感改密。
+  if (!verifyPassword(oldPassword, auth.user.password_hash)) {
+    return fail(CODE.OLD_PASSWORD_INCORRECT, MESSAGE.OLD_PASSWORD_INCORRECT);
+  }
+
+  await db
+    .collection("users")
+    .where({
+      user_id: auth.user.user_id,
+    })
+    .update({
+      data: {
+        password_hash: hashPassword(newPassword),
+        updated_at: new Date(),
+      },
+    });
+
+  return ok({
+    user_id: auth.user.user_id,
+    changed: true,
+    has_password: true,
   });
 }
 
 async function resetPasswordByWechat({ db, event, wxContext }) {
   const openid = String(wxContext.OPENID || "").trim();
-  const password = String(event.password || "");
+  const password = String(
+    pickEventField(event, ["password", "new_password", "newPassword"])
+  );
   if (!openid || !assertPassword(password)) {
     return fail(CODE.BAD_REQUEST, MESSAGE.BAD_REQUEST);
   }
@@ -248,6 +307,8 @@ async function getAuthProfile({ db, auth }) {
   const binding = await getBindingByOpenId(db, auth.session.openid || "");
   return ok({
     user: sanitizeUser(auth.user),
+    // 仅暴露布尔态，不回传 password_hash，避免前端接触敏感字段。
+    has_password: Boolean(auth.user.password_hash),
     session: {
       session_token: auth.token,
       expire_at: auth.session.expire_at,
@@ -280,6 +341,7 @@ module.exports = {
   passwordRegister,
   passwordLogin,
   setPassword,
+  changePassword,
   resetPasswordByWechat,
   getAuthProfile,
   logout,

@@ -3,13 +3,43 @@
  */
 
 // #ifdef MP-WEIXIN
+import { useUserStore } from "@/stores/user";
+
+const PUBLIC_ACTIONS = new Set([
+  "wxQuickLogin",
+  "passwordRegister",
+  "passwordLogin",
+  "resetPasswordByWechat",
+]);
+
+function normalizeEntryPayload(payload = {}) {
+  const basePayload = { ...payload };
+  // 兼容旧调用：{ action, data: {...} } -> 展开为顶层字段。
+  if (basePayload && typeof basePayload.data === "object" && basePayload.data !== null) {
+    Object.assign(basePayload, basePayload.data);
+    delete basePayload.data;
+  }
+
+  const action = String(basePayload.action || "").trim();
+  // 受保护 action 自动补 session_token，减少页面重复传参与漏传风险。
+  if (!PUBLIC_ACTIONS.has(action) && !basePayload.session_token) {
+    const userStore = useUserStore();
+    const token = String(userStore.sessionToken || "").trim();
+    if (token) {
+      basePayload.session_token = token;
+    }
+  }
+  return basePayload;
+}
+
 /**
  * @param {Record<string, unknown>} [data]
  */
 export function callEntryCloud(data = {}) {
+  const payload = normalizeEntryPayload(data);
   return wx.cloud.callFunction({
     name: "entry",
-    data,
+    data: payload,
   });
 }
 

@@ -4,6 +4,10 @@ const CODE = {
   OK: 0,
   BAD_REQUEST: 40001,
   INVALID_CREDENTIALS: 40002,
+  // 修改密码时旧密码校验失败。
+  OLD_PASSWORD_INCORRECT: 40003,
+  // 已有密码的账号再次调用 setPassword 时返回该码，避免无旧密码覆盖。
+  PASSWORD_ALREADY_SET: 40004,
   UNAUTHORIZED: 40101,
   USER_NOT_FOUND: 40401,
   WECHAT_ALREADY_BOUND: 40901,
@@ -15,6 +19,8 @@ const MESSAGE = {
   OK: "ok",
   BAD_REQUEST: "参数错误",
   INVALID_CREDENTIALS: "用户名或密码错误",
+  OLD_PASSWORD_INCORRECT: "旧密码错误",
+  PASSWORD_ALREADY_SET: "已设置登录密码，请使用修改密码",
   UNAUTHORIZED: "请先登录",
   USER_NOT_FOUND: "用户不存在",
   WECHAT_ALREADY_BOUND: "当前微信已绑定其他账号",
