@@ -43,11 +43,11 @@ const fetchUserProfile = async () => {
     if (result.code === 0 && result.data) {
       // 更新本地store中的profile
       if (result.data.user) {
-        userStore.profile = {
+        userStore.setProfile({
           ...userStore.profile,
           ...result.data.user,
           has_password: result.data.has_password
-        }
+        })
       }
       // 更新hasPassword状态
       hasPassword.value = result.data.has_password || false
@@ -109,7 +109,10 @@ const saveNickname = async () => {
     
     // 更新本地store，只更新nickname字段，不影响username（账户名）
     if (userStore.profile) {
-      userStore.profile.nickname = nickname.value.trim()
+      userStore.setProfile({
+        ...userStore.profile,
+        nickname: nickname.value.trim()
+      })
     }
     
     isEditingNickname.value = false
@@ -167,11 +170,12 @@ const saveUsername = async () => {
     
     // 更新本地store
     if (userStore.profile) {
-      userStore.profile.username = username.value.trim()
-      // 如果nickname为空，也更新为新的username
-      if (!userStore.profile.nickname) {
-        userStore.profile.nickname = username.value.trim()
-      }
+      userStore.setProfile({
+        ...userStore.profile,
+        username: username.value.trim(),
+        // 如果nickname为空，也更新为新的username
+        nickname: userStore.profile.nickname || username.value.trim()
+      })
     }
     
     isEditingUsername.value = false
@@ -342,12 +346,8 @@ const onSavePassword = async () => {
       icon: 'success'
     })
 
-    // 更新本地store：设置has_password和user_type
-    if (userStore.profile) {
-      userStore.profile.has_password = true
-      userStore.profile.user_type = 'account' // 设置密码后，用户类型变为 account
-    }
-    hasPassword.value = true
+    // 重新获取最新用户资料，确保所有字段与云端同步
+    await fetchUserProfile()
     
     closePasswordPopup()
   } catch (error) {
@@ -372,12 +372,12 @@ const onSavePassword = async () => {
     <top-nav title="账号信息" />
     
     <view class="update-content">
-      <!-- 账号昵称 -->
+      <!-- 昵称 -->
       <view class="update-item">
         <view class="item-left">
           
           <view v-if="!isEditingNickname" class="value-display">
-            <text class="label">账号昵称：</text>
+            <text class="label">昵称：</text>
             <text>{{ displayName }}</text>
           </view>
           <view v-else class="value-input">

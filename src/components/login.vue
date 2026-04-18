@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { callEntryCloud } from "@/utils/wx-cloud-call";
 import { useUserStore } from "@/stores/user";
+import { debounce } from "@/utils/debounce";
 
 const emit = defineEmits(['success'])
 const userStore = useUserStore();
@@ -40,7 +41,7 @@ const switchToPasswordLogin = () => {
 /**
  * 根据openId一键登录/注册
  */
-const onQuickLogin = async () => {
+const onQuickLogin = debounce(async () => {
   uni.showLoading({
     title: 'Loading...'
   })
@@ -70,12 +71,12 @@ const onQuickLogin = async () => {
   } finally {
     uni.hideLoading()
   }
-}
+}, 500);
 
 /**
  * 账户密码登录
  */
-const onPasswordLogin = async () => {
+const onPasswordLogin = debounce(async () => {
   if (!formData.value.username || !formData.value.password) {
     uni.showToast({
       title: '请输入账号和密码',
@@ -92,7 +93,7 @@ const onPasswordLogin = async () => {
     const res = await callEntryCloud({
       action: "passwordLogin",
       data: {
-        username: formData.value.username,
+        username: formData.value.username.trim(), // 添加trim处理
         password: formData.value.password
       }
     });
@@ -111,23 +112,34 @@ const onPasswordLogin = async () => {
   } catch (error) {
     console.error('登录失败:', error);
     uni.showToast({
-      title: error?.message || '登录失败',
+      title: error?.message || '登录失败，请检查账号密码',
       icon: 'error',
       duration: 2000
     });
   } finally {
     uni.hideLoading();
   }
-}
+}, 500);
 
 /**
  * 账户密码注册
  */
-const onRegister = async () => {
+const onRegister = debounce(async () => {
   // 表单验证
   if (!formData.value.username || !formData.value.password || !formData.value.confirmPassword) {
     uni.showToast({
       title: '请填写完整信息',
+      icon: 'none'
+    });
+    return;
+  }
+
+  // 用户名格式验证
+  const trimmedUsername = formData.value.username.trim();
+  const usernameRegex = /^[a-zA-Z0-9_]{6,20}$/;
+  if (!usernameRegex.test(trimmedUsername)) {
+    uni.showToast({
+      title: '账号名称只能包含字母、数字、下划线，长度6-20位',
       icon: 'none'
     });
     return;
@@ -157,7 +169,7 @@ const onRegister = async () => {
     const res = await callEntryCloud({
       action: "passwordRegister",
       data: {
-        username: formData.value.username,
+        username: trimmedUsername, // 使用trim后的值
         password: formData.value.password
       }
     });
@@ -177,14 +189,14 @@ const onRegister = async () => {
   } catch (error) {
     console.error('注册失败:', error);
     uni.showToast({
-      title: error?.message || '注册失败',
+      title: error?.message || '注册失败，请稍后重试',
       icon: 'error',
       duration: 2000
     });
   } finally {
     uni.hideLoading();
   }
-}
+}, 500);
 </script>
 
 <template>

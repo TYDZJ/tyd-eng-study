@@ -132,11 +132,18 @@ async function wxQuickLogin({ db, wxContext }) {
 
 async function passwordRegister({ db, event, wxContext }) {
   const openid = String(wxContext.OPENID || "").trim();
-  const username = normalizeUsername(pickEventField(event, ["username"]));
+  const rawUsername = pickEventField(event, ["username"]);
+  const username = normalizeUsername(rawUsername);
   const password = String(pickEventField(event, ["password"]));
 
   if (!openid || !username || !assertPassword(password)) {
     return fail(CODE.BAD_REQUEST, MESSAGE.BAD_REQUEST);
+  }
+
+  // 验证账号名称格式：只能包含字母、数字、下划线，长度6-20位
+  const usernameRegex = /^[a-zA-Z0-9_]{6,20}$/;
+  if (!usernameRegex.test(username)) {
+    return fail(CODE.BAD_REQUEST, "账号名称只能包含字母、数字、下划线，长度6-20位");
   }
 
   const bound = await getBindingByOpenId(db, openid);
@@ -373,6 +380,7 @@ async function updateNickname({ db, auth, event }) {
   return ok({
     user_id: auth.user.user_id,
     nickname: nickname,
+    user_type: "account",
     updated: true,
   });
 }
@@ -413,6 +421,7 @@ async function updateUsername({ db, auth, event }) {
   return ok({
     user_id: auth.user.user_id,
     username: newUsername,
+    user_type: "account",
     updated: true,
   });
 }

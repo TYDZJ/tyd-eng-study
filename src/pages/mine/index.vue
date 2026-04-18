@@ -41,6 +41,12 @@ const refreshUserProfile = async () => {
     
     // 处理业务错误
     if (result.code !== 0) {
+      // 40101: token 失效（兜底处理）
+      if (result.code === 40101) {
+        userStore.clearAuth();
+        return; // callEntryCloud 已处理跳转
+      }
+      
       // 40401: 用户不存在，可能是数据异常
       if (result.code === 40401) {
         console.error('用户数据异常:', result.message);
@@ -108,17 +114,31 @@ const goToProfile = () => {
 }
 
 // 退出登录
-const handleLogout = () => {
+const handleLogout = async () => {
   uni.showModal({
     title: '提示',
     content: '确定要退出登录吗？',
-    success: (res) => {
+    success: async (res) => {
       if (res.confirm) {
-        userStore.logout();
-        uni.showToast({
-          title: '已退出登录',
-          icon: 'success'
+        uni.showLoading({
+          title: '退出中...'
         });
+        
+        try {
+          // 先调用后端撤销会话
+          await callEntryCloud({ action: "logout" });
+        } catch (error) {
+          // 即使后端调用失败，也要清除本地状态
+          console.error('退出登录失败:', error);
+        } finally {
+          // 清除前端本地状态
+          userStore.logout();
+          uni.hideLoading();
+          uni.showToast({
+            title: '已退出登录',
+            icon: 'success'
+          });
+        }
       }
     }
   });
@@ -165,7 +185,7 @@ const menuItems = [
           :src="userInfo.avatar" 
           mode="aspectFill"
         ></image>
-        <text class="nickname">{{ userInfo.nickname || '匿名用户' }}</text>
+        <text class="nickname">{{ isLoggedIn ? userInfo.nickname || '匿名用户' : '未登录' }}</text>
       </view>
 
       <!-- 功能区 -->
@@ -180,7 +200,7 @@ const menuItems = [
             <text class="menu-icon">{{ item.icon }}</text>
             <text class="menu-name">{{ item.name }}</text>
           </view>
-          <text class="menu-arrow">></text>
+          <text class="menu-arrow">{{ '&gt;' }}</text>
         </view>
       </view>
 

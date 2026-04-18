@@ -58,11 +58,11 @@ export async function callEntryCloud(data = {}) {
       });
       
       // 延迟跳转，让用户看到提示
-      setTimeout(() => {
-        uni.reLaunch({
-          url: '/pages/index/index'
-        });
-      }, 1500);
+      // setTimeout(() => {
+      //   uni.reLaunch({
+      //     url: '/pages/index/index'
+      //   });
+      // }, 1500);
     }
     
     return res;

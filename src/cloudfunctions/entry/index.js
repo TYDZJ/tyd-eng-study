@@ -4,6 +4,7 @@ const { fail } = require("./lib/response");
 const { requireAuth } = require("./lib/auth");
 const authHandlers = require("./handlers/auth");
 const learnHandlers = require("./handlers/learn");
+const settingsHandlers = require("./handlers/settings");
 
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV,
@@ -25,6 +26,8 @@ const actionMap = {
   updateNickname: authHandlers.updateNickname,
   updateUsername: authHandlers.updateUsername,
   getLearnWords: learnHandlers.getLearnWords,
+  getUserSettings: settingsHandlers.getUserSettings,
+  updateUserSettings: settingsHandlers.updateUserSettings,
 };
 
 // 白名单 action：不需要 session_token 也可调用。
