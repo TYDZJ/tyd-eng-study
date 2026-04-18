@@ -35,12 +35,41 @@ function normalizeEntryPayload(payload = {}) {
 /**
  * @param {Record<string, unknown>} [data]
  */
-export function callEntryCloud(data = {}) {
+export async function callEntryCloud(data = {}) {
   const payload = normalizeEntryPayload(data);
-  return wx.cloud.callFunction({
-    name: "entry",
-    data: payload,
-  });
+  
+  try {
+    const res = await wx.cloud.callFunction({
+      name: "entry",
+      data: payload,
+    });
+    
+    // 统一处理 401 未授权错误
+    const result = res?.result;
+    if (result && result.code === 40101) {
+      // token 失效，清除本地登录状态
+      const userStore = useUserStore();
+      userStore.clearAuth();
+      
+      // 提示用户并跳转登录
+      uni.showToast({
+        title: '登录已过期，请重新登录',
+        icon: 'none'
+      });
+      
+      // 延迟跳转，让用户看到提示
+      setTimeout(() => {
+        uni.reLaunch({
+          url: '/pages/index/index'
+        });
+      }, 1500);
+    }
+    
+    return res;
+  } catch (error) {
+    console.error('[callEntryCloud] 调用失败:', error);
+    throw error;
+  }
 }
 
 /**

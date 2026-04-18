@@ -1,8 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue';
+import { onShow } from '@dcloudio/uni-app';
 import { useUserStore } from '@/stores/user';
 import TopNav from '@/components/top-nav.vue'
 import loginPopup from '../../components/login-popup.vue';
+import { callEntryCloud } from '@/utils/wx-cloud-call';
 
 const userStore = useUserStore();
 const showLoginPopup = ref(false);
@@ -12,6 +14,75 @@ const isLoggedIn = computed(() => userStore.isLoggedIn);
 
 // 用户信息
 const userInfo = computed(() => userStore.profile || {});
+
+// 页面显示时刷新用户信息（包括从其他页面返回时）
+onShow(async () => {
+  if (isLoggedIn.value) {
+    await refreshUserProfile();
+  }
+});
+
+// 刷新用户资料
+const refreshUserProfile = async () => {
+  uni.showLoading({
+    title: '加载中...'
+  });
+  try {
+    const res = await callEntryCloud({
+      action: "getAuthProfile"
+    });
+    
+    const result = res?.result;
+    
+    // 检查云函数是否调用成功
+    if (!result) {
+      throw new Error('云函数调用失败');
+    }
+    
+    // 处理业务错误
+    if (result.code !== 0) {
+      // 40401: 用户不存在，可能是数据异常
+      if (result.code === 40401) {
+        console.error('用户数据异常:', result.message);
+        userStore.clearAuth();
+        uni.showToast({
+          title: '用户数据异常，请重新登录',
+          icon: 'none',
+          duration: 2000
+        });
+        return;
+      }
+      
+      // 其他业务错误
+      console.error('获取用户信息失败:', result.message);
+      uni.showToast({
+        title: result.message || '获取用户信息失败',
+        icon: 'none',
+        duration: 2000
+      });
+      return;
+    }
+    
+    // 成功：更新本地store中的profile
+    if (result.data && result.data.user) {
+      userStore.setProfile({
+        ...result.data.user,
+        has_password: result.data.has_password
+      });
+    }
+  } catch (error) {
+    // 这里只处理网络异常或 JS 运行时错误
+    console.error('获取用户信息异常:', error);
+    uni.showToast({
+      title: '网络异常，请稍后重试',
+      icon: 'none',
+      duration: 2000
+    });
+  } finally {
+    // 无论成功还是失败，都隐藏 Loading
+    uni.hideLoading();
+  }
+};
 
 // 打开登录弹窗
 const openLoginPopup = () => {
