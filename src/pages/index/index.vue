@@ -61,7 +61,7 @@ const goPage = (url) => {
     <!-- 按钮组 -->
     <view class="bottom-btns">
       <view class="btn" @click="goPage('/pages/config/index')">配置</view>
-      <view class="btn" @click="goPage('/pages/data/index')">数据</view>
+      <view class="btn" @click="goPage('/pages/dash-board/index')">仪表盘</view>
       <view class="btn" @click="goPage('/pages/mine/index')">我的</view>
     </view>
     <LoginPopup
