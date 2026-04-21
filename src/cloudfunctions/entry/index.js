@@ -5,6 +5,9 @@ const { requireAuth } = require("./lib/auth");
 const authHandlers = require("./handlers/auth");
 const learnHandlers = require("./handlers/learn");
 const settingsHandlers = require("./handlers/settings");
+const dashboardHandlers = require("./handlers/dashboard");
+const learningStatsHandlers = require("./handlers/learning_stats");
+const bookSettingsHandlers = require("./handlers/book_settings");
 
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV,
@@ -28,6 +31,17 @@ const actionMap = {
   getLearnWords: learnHandlers.getLearnWords,
   getUserSettings: settingsHandlers.getUserSettings,
   updateUserSettings: settingsHandlers.updateUserSettings,
+  // Dashboard handlers (签到相关)
+  signIn: dashboardHandlers.signIn,
+  makeupSignIn: dashboardHandlers.makeupSignIn,
+  getSignedDates: dashboardHandlers.getSignedDates,
+  // Learning stats handlers (学习统计相关)
+  getUserStatistics: learningStatsHandlers.getUserStatistics,
+  // Book settings handlers (词书管理相关)
+  getBookList: bookSettingsHandlers.getBookList,
+  getCurrentBook: bookSettingsHandlers.getCurrentBook,
+  setCurrentBook: bookSettingsHandlers.setCurrentBook,
+  updateBookProgress: bookSettingsHandlers.updateBookProgress,
 };
 
 // 白名单 action：不需要 session_token 也可调用。

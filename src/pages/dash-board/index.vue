@@ -1,29 +1,26 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { onShow, onReady } from '@dcloudio/uni-app';
+import { onShow } from '@dcloudio/uni-app';
 import dayjs from 'dayjs';
 import TopNav from '@/components/top-nav.vue';
+import CustomCalendar from '@/components/custom-calendar.vue';
 import { useUserStore } from '@/stores/user';
 import { callEntryCloud } from '@/utils/wx-cloud-call';
 
 const userStore = useUserStore();
-const calendarRef = ref(null);
 
-// 模拟数据 - 在学词书
-const currentBook = ref({
-  id: 'cet4',
-  title: '四级核心词汇',
-  desc: '大学英语四级考试核心词汇',
-  cover: '', // 可以是图片URL或纯色背景
-  learnedCount: 156,
-  totalCount: 2000
-});
+// 模拟数据 - 在学词书（将从后端获取）
+const currentBook = ref(null); // null 表示未选择词书
 
 // 学习进度计算
 const learnProgress = computed(() => {
-  if (!currentBook.value.totalCount) return 0;
+  if (!currentBook.value || !currentBook.value.totalCount) return 0;
   return Math.round((currentBook.value.learnedCount / currentBook.value.totalCount) * 100);
 });
+
+// 词书选择弹窗相关
+const showBookPicker = ref(false); // 控制词书选择弹窗显示
+const bookList = ref([]); // 词书列表
 
 // 统计数据
 const statistics = ref({
@@ -34,42 +31,37 @@ const statistics = ref({
 });
 
 // 日历相关
-const showCalendar = ref(true); // 控制日历显示
-const currentDate = ref([dayjs().format('YYYY-MM-DD')]); // 当前选中的日期，默认今天（数组格式）
-const signedDates = ref(new Set()); // 已签到的日期集合
+const currentDate = ref(dayjs().format('YYYY-MM-DD')); // 当前选中的日期，默认今天（字符串格式）
+const signedDates = ref(new Set()); // 已签到的日期集合 (数据源完全来自后端)
+const calendarRange = ref({
+  minDate: '', // 默认空，等待后端返回
+  maxDate: ''  // 默认空，等待后端返回
+}); // 日历有效期范围（从后端获取）
 
 // 判断选中日期是否已签到
 const isSelectedDateSigned = computed(() => {
-  console.log('已签到日期集合:', signedDates.value);
-  return signedDates.value.has(currentDate.value[0]);
+  return signedDates.value.has(currentDate.value);
 });
 
 // 判断选中日期是否是今天
 const isSelectedDateToday = computed(() => {
-  console.log('当前选中日期:', currentDate.value[0]);
-  console.log('今天是:', dayjs().format('YYYY-MM-DD'));
-  return currentDate.value[0] === dayjs().format('YYYY-MM-DD');
+  return currentDate.value === dayjs().format('YYYY-MM-DD');
 });
 
 // 判断选中日期是否是未来日期
 const isSelectedDateFuture = computed(() => {
-  return dayjs(currentDate.value[0]).isAfter(dayjs(), 'day');
+  return dayjs(currentDate.value).isAfter(dayjs(), 'day');
 });
 
-// 日历格式化函数 - 标记已签到的日期
-const formatter = (day) => {
-  const dateStr = `${day.year}-${String(day.month).padStart(2, '0')}-${String(day.day).padStart(2, '0')}`;
-  console.log('日期:', dateStr);
-  //日期: undefined-04-30
-  // 如果该日期已签到，显示"已签到"（橙色），否则显示"未签到"（灰色）
-  if (signedDates.value.has(dateStr)) {
-    day.bottomInfo = '已签到';
-  } else {
-    day.bottomInfo = '未签到';
-    day.dot = true;
-  }
-  
-  return day;
+// 日历日期点击事件
+const handleDayClick = (day) => {
+  console.log('点击日期:', day);
+  currentDate.value = day.date;
+};
+
+// 日历月份切换事件
+const handleMonthChange = (monthData) => {
+  console.log('切换到月份:', monthData.year, '年', monthData.month, '月');
 };
 
 // 签到
@@ -81,22 +73,35 @@ const handleSignIn = async () => {
   uni.showLoading({ title: '签到中...' });
   
   try {
-    // TODO: 调用后端签到接口
-    // await callEntryCloud({
-    //   action: 'signIn',
-    //   date: currentDate.value[0]
-    // });
+    // 调用后端签到接口
+    const res = await callEntryCloud({
+      action: 'signIn',
+      date: currentDate.value
+    });
+    const result = res?.result || {};
     
-    // 临时使用本地存储
-    signedDates.value.add(currentDate.value[0]);
+    console.log('签到接口返回:', result); // ✅ 添加调试日志
     
-    // 更新统计数据
-    statistics.value.totalDays += 1;
-    
-    uni.showToast({ title: '签到成功', icon: 'success' });
+    if (result.code === 0) {
+      // ✅ 关键修改：不操作本地 Set，而是重新从云端拉取最新数据
+      // 这样可以保证多端同步，且状态绝对准确
+      await fetchStatistics();
+      
+      uni.showToast({ title: '签到成功', icon: 'success' });
+    } else {
+      // 处理错误
+      if (result.code === 409) {
+        // 即使报错也刷新一下，防止本地状态滞后
+        console.warn('收到409错误，重新同步数据');
+        await fetchStatistics();
+        uni.showToast({ title: '该日期已签到', icon: 'none' });
+      } else {
+        uni.showToast({ title: result.message || '签到失败', icon: 'none' });
+      }
+    }
   } catch (error) {
-    console.error('签到失败:', error);
-    uni.showToast({ title: '签到失败', icon: 'none' });
+    console.error('签到异常:', error);
+    uni.showToast({ title: '网络错误', icon: 'none' });
   } finally {
     uni.hideLoading();
   }
@@ -116,22 +121,30 @@ const handleMakeupSignIn = async () => {
         uni.showLoading({ title: '补签中...' });
         
         try {
-          // TODO: 调用后端补签接口
-          // await callEntryCloud({
-          //   action: 'makeupSignIn',
-          //   date: currentDate.value[0]
-          // });
+          // 调用后端补签接口
+          const result_res = await callEntryCloud({
+            action: 'makeupSignIn',
+            date: currentDate.value
+          });
+          const result = result_res?.result || {};
           
-          // 临时使用本地存储
-          signedDates.value.add(currentDate.value[0]);
-          
-          // 更新统计数据
-          statistics.value.totalDays += 1;
-          
-          uni.showToast({ title: '补签成功', icon: 'success' });
+          if (result.code === 0) {
+            // ✅ 关键修改：重新从云端拉取最新数据
+            await fetchStatistics();
+            
+            uni.showToast({ title: '补签成功', icon: 'success' });
+          } else {
+            // 处理错误
+            if (result.code === 409) {
+              await fetchStatistics();
+              uni.showToast({ title: '该日期已签到', icon: 'none' });
+            } else {
+              uni.showToast({ title: result.message || '补签失败', icon: 'none' });
+            }
+          }
         } catch (error) {
-          console.error('补签失败:', error);
-          uni.showToast({ title: '补签失败', icon: 'none' });
+          console.error('补签异常:', error);
+          uni.showToast({ title: '网络错误', icon: 'none' });
         } finally {
           uni.hideLoading();
         }
@@ -142,61 +155,157 @@ const handleMakeupSignIn = async () => {
 
 // 换本词书
 const handleChangeBook = () => {
-  uni.showToast({
-    title: '换本词书功能开发中',
-    icon: 'none'
-  });
-  // TODO: 跳转到词书选择页面
-  // uni.navigateTo({
-  //   url: '/pages/book-list/index'
-  // });
+  openBookPicker();
 };
 
-// 获取用户统计数据
+// 获取用户统计数据 (核心数据同步函数)
 const fetchStatistics = async () => {
   try {
-    // TODO: 调用后端接口获取真实数据
-    // const res = await callEntryCloud({ action: 'getUserStatistics' });
+    // 1. 并行请求所有数据，提高加载速度
+    const [statsRes, signedRes, bookRes] = await Promise.all([
+      callEntryCloud({ action: 'getUserStatistics' }),
+      callEntryCloud({ action: 'getSignedDates' }),
+      callEntryCloud({ action: 'getCurrentBook' })
+    ]);
+
+    const statsResult = statsRes?.result || {};
+    const signedResult = signedRes?.result || {};
+    const bookResult = bookRes?.result || {};
+
+    // 2. 处理学习统计
+    if (statsResult.code === 0 && statsResult.data) {
+      statistics.value = {
+        todayLearned: statsResult.data.todayLearned || 0,
+        todayReviewed: statsResult.data.todayReviewed || 0,
+        totalLearned: statsResult.data.totalLearned || 0,
+        totalDays: statsResult.data.totalDays || 0
+      };
+    } else {
+      console.error('获取统计数据失败:', statsResult.message);
+    }
     
-    // 临时使用模拟数据
-    statistics.value = {
-      todayLearned: 25,
-      todayReviewed: 10,
-      totalLearned: 156,
-      totalDays: 12
-    };
+    // 3. 处理已签到日期和有效期 (关键：完全由后端控制)
+    if (signedResult.code === 0 && signedResult.data) {
+      // 将后端返回的数组转换为 Set，用于快速查找
+      signedDates.value = new Set(signedResult.data.dates || []);
+      
+      // ✅ 更新有效期范围（即使 dates 为空数组，也要更新范围）
+      if (signedResult.data.minDate && signedResult.data.maxDate) {
+        calendarRange.value = {
+          minDate: signedResult.data.minDate,
+          maxDate: signedResult.data.maxDate
+        };
+        
+        console.log('云端数据同步完成:', {
+          已签到数量: signedDates.value.size,
+          有效期范围: `${calendarRange.value.minDate} ~ ${calendarRange.value.maxDate}`,
+          签到列表: Array.from(signedDates.value)
+        });
+      }
+    } else {
+      signedDates.value = new Set(); // 失败或无数据时清空
+      console.error('获取已签到日期失败:', signedResult.message);
+    }
     
-    // 获取已签到日期列表
-    // const signedRes = await callEntryCloud({ action: 'getSignedDates' });
-    // signedDates.value = new Set(signedRes?.data?.dates || []);
+    // 4. 处理词书信息
+    if (bookResult.code === 0 && bookResult.data) {
+      currentBook.value = {
+        id: bookResult.data.book_id,
+        title: bookResult.data.book_name,
+        desc: bookResult.data.book_desc,
+        cover: '', // TODO: 后续可以从词书配置中获取封面
+        learnedCount: bookResult.data.learned_count || 0,
+        totalCount: bookResult.data.total_count || 0
+      };
+      console.log('当前词书:', currentBook.value);
+    } else {
+      // 没有选择词书，保持 null
+      currentBook.value = null;
+      console.log('未选择词书');
+    }
+
+  } catch (error) {
+    console.error('获取数据异常:', error);
+    uni.showToast({ title: '数据同步失败', icon: 'none' });
+  }
+};
+
+// 打开词书选择弹窗
+const openBookPicker = async () => {
+  showBookPicker.value = true;
+  
+  // 如果词书列表为空，从后端获取
+  if (bookList.value.length === 0) {
+    uni.showLoading({ title: '加载中...' });
     
-    // 临时使用模拟的签到数据
-    const today = dayjs();
-    for (let i = 0; i < 12; i++) {
-      const date = today.subtract(i, 'day').format('YYYY-MM-DD');
-      signedDates.value.add(date);
+    try {
+      const res = await callEntryCloud({ action: 'getBookList' });
+      const result = res?.result || {};
+      
+      if (result.code === 0 && result.data?.books) {
+        bookList.value = result.data.books;
+      } else {
+        uni.showToast({ title: result.message || '获取词书列表失败', icon: 'none' });
+      }
+    } catch (error) {
+      console.error('获取词书列表异常:', error);
+      uni.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      uni.hideLoading();
+    }
+  }
+};
+
+// 关闭词书选择弹窗
+const closeBookPicker = () => {
+  showBookPicker.value = false;
+};
+
+// 确认选择词书
+const confirmBookSelection = async (book) => {
+  uni.showLoading({ title: '设置中...' });
+  
+  try {
+    const res = await callEntryCloud({
+      action: 'setCurrentBook',
+      book_id: book.book_id
+    });
+    const result = res?.result || {};
+    
+    if (result.code === 0) {
+      // 更新本地词书信息
+      currentBook.value = {
+        id: book.book_id,
+        title: book.book_name,
+        desc: book.book_desc,
+        cover: '',
+        learnedCount: 0, // 新词书进度为 0
+        totalCount: book.total_count
+      };
+      
+      // 关闭弹窗
+      showBookPicker.value = false;
+      
+      uni.showToast({ title: '词书设置成功', icon: 'success' });
+    } else {
+      uni.showToast({ title: result.message || '设置失败', icon: 'none' });
     }
   } catch (error) {
-    console.error('获取统计数据失败:', error);
+    console.error('设置词书异常:', error);
+    uni.showToast({ title: '设置失败', icon: 'none' });
+  } finally {
+    uni.hideLoading();
   }
 };
 
 // 日历确认事件
 const onCalendarConfirm = (date) => {
   console.log('日历选中日期:', date);
-  // 如果需要在这里更新 currentDate，v-model 通常会自动处理
-  // 可以在这里添加额外的业务逻辑
-  console.log('之前的日期:', currentDate.value);
-  currentDate.value = date;
-  console.log('新的日期:', currentDate.value);
-};
-
-// 页面加载时设置 formatter（兼容微信小程序）
-onReady(() => {
-  if (calendarRef.value && calendarRef.value.setFormatter) {
-    calendarRef.value.setFormatter(formatter);
+  if (typeof date === 'string') {
+    currentDate.value = date;
   }
-});
+  console.log('当前选中日期:', currentDate.value);
+};
 
 // 页面显示时刷新数据
 onShow(async () => {
@@ -220,15 +329,23 @@ onShow(async () => {
         
         <view class="white-card">
           <!-- 词书卡片 -->
-          <view class="book-card" :style="{ background: currentBook.cover || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }">
+          <view v-if="currentBook" class="book-card" :style="{ background: currentBook.cover || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }">
             <view class="book-info">
               <text class="book-title">{{ currentBook.title }}</text>
               <text class="book-desc">{{ currentBook.desc }}</text>
             </view>
           </view>
           
+          <!-- 未选择词书提示 -->
+          <view v-else class="no-book-tip">
+            <text class="tip-text">还未选择词书</text>
+            <view class="select-book-btn" @click="openBookPicker">
+              <text class="btn-text">立即选择</text>
+            </view>
+          </view>
+          
           <!-- 学习进度和数据 -->
-          <view class="progress-section">
+          <view v-if="currentBook" class="progress-section">
             <view class="progress-bar-bg">
               <view class="progress-bar-fill" :style="{ width: learnProgress + '%' }"></view>
             </view>
@@ -268,19 +385,15 @@ onShow(async () => {
         
         <!-- 日历 -->
         <view class="white-card calendar-card">
-          <up-calendar 
-            ref="calendarRef"
-            :show="showCalendar"
-            :showTitle="false"
-            mode="single"
-            :pageInline="true"
-            monthNum="6"
-            :min-date="dayjs().subtract(5, 'month').format('YYYY-MM-DD')"
-            :max-date="dayjs().format('YYYY-MM-DD')"
-            :defaultDate="dayjs().format('YYYY-MM-DD')"
-            v-model="currentDate"
-            :show-confirm="false"
-            @confirm="onCalendarConfirm"
+          <!-- ✅ 使用自定义日历组件 -->
+          <CustomCalendar
+            v-if="calendarRange.minDate && calendarRange.maxDate"
+            :minDate="calendarRange.minDate"
+            :maxDate="calendarRange.maxDate"
+            :signedDates="signedDates"
+            :currentDate="currentDate"
+            @dayClick="handleDayClick"
+            @monthChange="handleMonthChange"
           />
           
           <!-- 按钮区 -->
@@ -298,6 +411,54 @@ onShow(async () => {
 
     <u-safe-bottom />
   </view>
+
+  <!-- 词书选择弹窗 -->
+  <up-popup 
+    v-model:show="showBookPicker" 
+    mode="bottom" 
+    :round="20"
+    :safeAreaInsetBottom="true"
+  >
+    <view class="book-picker-popup">
+      <!-- 标题栏 -->
+      <view class="popup-header">
+        <text class="popup-title">选择词书</text>
+        <view class="close-btn" @click="closeBookPicker">
+          <u-icon name="close" size="20" color="#999"></u-icon>
+        </view>
+      </view>
+      
+      <!-- 内容区 - 词书列表 -->
+      <scroll-view scroll-y class="popup-content">
+        <view 
+          v-for="(book, index) in bookList" 
+          :key="index"
+          class="book-item"
+          @click="confirmBookSelection(book)"
+        >
+          <view class="book-cover" :style="{ background: book.cover_color }">
+            <view class="book-info-overlay">
+              <text class="book-name">{{ book.book_name }}</text>
+              <text class="book-description">{{ book.book_desc }}</text>
+              <text class="book-total">总词数：{{ book.total_count }}</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 空状态 -->
+        <view v-if="bookList.length === 0" class="empty-state">
+          <text class="empty-text">暂无词书</text>
+        </view>
+      </scroll-view>
+      
+      <!-- 底部确认按钮（可选，点击词书即确认） -->
+      <!-- <view class="popup-footer">
+        <view class="confirm-btn" @click="closeBookPicker">
+          <text class="btn-text">取消</text>
+        </view>
+      </view> -->
+    </view>
+  </up-popup>
 </template>
 
 <style scoped lang="scss">
@@ -345,6 +506,7 @@ onShow(async () => {
   }
 }
 
+
 .white-card {
   background-color: #fff;
   border-radius: 16rpx;
@@ -380,6 +542,31 @@ onShow(async () => {
         display: block;
         font-size: 24rpx;
         opacity: 0.9;
+      }
+    }
+  }
+  
+  .no-book-tip {
+    padding: 60rpx 20rpx;
+    text-align: center;
+    
+    .tip-text {
+      display: block;
+      font-size: 28rpx;
+      color: #999;
+      margin-bottom: 24rpx;
+    }
+    
+    .select-book-btn {
+      display: inline-block;
+      padding: 16rpx 40rpx;
+      background: linear-gradient(135deg, #ff9a56 0%, #ff6b35 100%);
+      border-radius: 50rpx;
+      
+      .btn-text {
+        font-size: 28rpx;
+        color: #fff;
+        font-weight: 500;
       }
     }
   }
@@ -467,6 +654,110 @@ onShow(async () => {
           color: #ff6b35;
           border: 2rpx solid #ff6b35;
         }
+      }
+    }
+  }
+}
+
+// 词书选择弹窗样式
+.book-picker-popup {
+  height: 60vh;
+  display: flex;
+  flex-direction: column;
+  
+  .popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 30rpx;
+    border-bottom: 1rpx solid #f0f0f0;
+    
+    .popup-title {
+      font-size: 32rpx;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .close-btn {
+      padding: 10rpx;
+    }
+  }
+  
+  .popup-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20rpx;
+    box-sizing: border-box;
+    
+    .book-item {
+      margin-bottom: 20rpx;
+      border-radius: 16rpx;
+      overflow: hidden;
+      box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+      transition: transform 0.2s ease;
+      
+      &:active {
+        transform: scale(0.98);
+      }
+      
+      .book-cover {
+        min-height: 200rpx;
+        padding: 30rpx;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        
+        .book-info-overlay {
+          text-align: center;
+          color: #fff;
+          
+          .book-name {
+            display: block;
+            font-size: 36rpx;
+            font-weight: bold;
+            margin-bottom: 12rpx;
+          }
+          
+          .book-description {
+            display: block;
+            font-size: 24rpx;
+            opacity: 0.9;
+            margin-bottom: 8rpx;
+          }
+          
+          .book-total {
+            display: block;
+            font-size: 22rpx;
+            opacity: 0.8;
+          }
+        }
+      }
+    }
+    
+    .empty-state {
+      padding: 100rpx 0;
+      text-align: center;
+      
+      .empty-text {
+        font-size: 28rpx;
+        color: #999;
+      }
+    }
+  }
+  
+  .popup-footer {
+    padding: 20rpx 30rpx;
+    border-top: 1rpx solid #f0f0f0;
+    
+    .confirm-btn {
+      padding: 24rpx 0;
+      text-align: center;
+      background-color: #f5f5f5;
+      border-radius: 50rpx;
+      
+      .btn-text {
+        font-size: 28rpx;
+        color: #666;
       }
     }
   }

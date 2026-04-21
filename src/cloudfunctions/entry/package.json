@@ -4,6 +4,7 @@
 	"description": "微信小程序云函数入口",
 	"main": "index.js",
 	"dependencies": {
-		"wx-server-sdk": "^3.0.4"
+		"wx-server-sdk": "^3.0.4",
+		"dayjs": "^1.11.20"
 	}
 }
