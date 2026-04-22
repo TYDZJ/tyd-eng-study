@@ -36,7 +36,8 @@
               'signed': day.signed,
               'unsigned': !day.signed && !day.disabled,
               'disabled': day.disabled,
-              'today': isToday(day.date)
+              'today': isToday(day.date),
+              'selected': isSelected(day.date)
             }"
             v-for="(day, dayIndex) in month.days" 
             :key="dayIndex"
@@ -135,6 +136,11 @@ const isToday = (dateStr) => {
   return dayjs(dateStr).isSame(dayjs(), 'day');
 };
 
+// 判断是否是选中的日期
+const isSelected = (dateStr) => {
+  return props.currentDate && dayjs(dateStr).isSame(dayjs(props.currentDate), 'day');
+};
+
 // 月份切换事件
 const onMonthChange = (e) => {
   currentMonthIndex.value = e.detail.current;
@@ -211,15 +217,15 @@ watch(() => [props.minDate, props.maxDate], () => {
         }
         
         &.signed {
-          background-color: #fff5f0;
+          background-color: #e8f5e9;  // 绿色背景 - 已签到
           
           .day-number {
-            color: #ff6b35;
+            color: #4caf50;
             font-weight: bold;
           }
           
           .day-status {
-            color: #ff6b35;
+            color: #4caf50;
             font-size: 18rpx;
           }
         }
@@ -242,14 +248,30 @@ watch(() => [props.minDate, props.maxDate], () => {
         }
         
         &.today {
+          background-color: #e3f2fd;  // 蓝色背景 - 今天
+          
           .day-number {
-            background-color: #ff6b35;
-            color: #fff;
-            width: 40rpx;
-            height: 40rpx;
-            line-height: 40rpx;
-            border-radius: 50%;
-            text-align: center;
+            color: #2196f3;
+            font-weight: bold;
+          }
+        }
+        
+        &.selected {
+          background-color: #fff3e0;  // 橙色背景 - 选中
+          border: 2rpx solid #ff9800;
+          border-radius: 8rpx;
+          transform: scale(1.05);
+          box-shadow: 0 2rpx 8rpx rgba(255, 152, 0, 0.3);
+          
+          .day-number {
+            color: #ff9800;
+            font-weight: bold;
+            font-size: 32rpx;
+          }
+          
+          .day-status {
+            color: #ff9800;
+            font-weight: bold;
           }
         }
         
