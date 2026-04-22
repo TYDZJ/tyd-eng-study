@@ -1,64 +1,45 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 /**
- * 四选一卡片练习
+ * 四选一卡片练习（保留原有双缓冲 Swiper 架构）
  * - 双缓冲 swiper：仅 2 个 swiper-item，换题时写入非当前槽再切 :current，复用 DOM
  * - 不展示轮播点；disable-touch + touchmove 禁止滑动；仅「下一题」切换
  * - 首次无错答对则 word.passed = true；有错后再答对仍可下一题但不标通过
  */
-const wordList = ref([
-  {
-    targetEn: 'apple',
-    passed: false,
-    options: [
-      { en: 'apple', cn: 'n. 苹果' },
-      { en: 'banana', cn: 'n. 香蕉' },
-      { en: 'cherry', cn: 'n. 樱桃' },
-      { en: 'orange', cn: 'n. 橙子' },
-    ],
+
+const props = defineProps({
+  words: {
+    type: Array,
+    default: () => []
   },
-  {
-    targetEn: 'abandon',
-    passed: false,
-    options: [
-      { en: 'ability', cn: 'n. 能力' },
-      { en: 'abandon', cn: 'v. 放弃，抛弃' },
-      { en: 'absolute', cn: 'adj. 绝对的' },
-      { en: 'abstract', cn: 'adj. 抽象的' },
-    ],
+  progressMap: {
+    type: Object,
+    default: () => ({})
   },
-  {
-    targetEn: 'benefit',
-    passed: false,
-    options: [
-      { en: 'beneath', cn: 'prep. 在…下方' },
-      { en: 'benefit', cn: 'n. 益处；v. 有益于' },
-      { en: 'beside', cn: 'prep. 在…旁边' },
-      { en: 'beyond', cn: 'prep. 超出' },
-    ],
+  sessionId: {
+    type: String,
+    default: ''
   },
-  {
-    targetEn: 'culture',
-    passed: false,
-    options: [
-      { en: 'culture', cn: 'n. 文化' },
-      { en: 'custom', cn: 'n. 习俗' },
-      { en: 'curious', cn: 'adj. 好奇的' },
-      { en: 'current', cn: 'adj. 当前的' },
-    ],
-  },
-  {
-    targetEn: 'delicate',
-    passed: false,
-    options: [
-      { en: 'define', cn: 'v. 定义' },
-      { en: 'delicate', cn: 'adj. 精致的；易碎的' },
-      { en: 'demand', cn: 'v. 要求' },
-      { en: 'deny', cn: 'v. 否认' },
-    ],
-  },
-])
+  bookId: {
+    type: String,
+    default: 'cet4'
+  }
+})
+
+const emit = defineEmits(['stage-complete'])
+
+/**
+ * 将云函数返回的单词数据转换为组件内部格式
+ */
+const wordList = computed(() => {
+  return props.words.map(word => ({
+    _id: word._id,
+    targetEn: word.word,  // 字段映射
+    passed: props.progressMap[word._id]?.card_done || false,
+    options: word.options || []
+  }))
+})
 
 /** 从前往后找第一个未通过（passed === false） */
 const findFromStartIndex = () => {
@@ -103,6 +84,30 @@ const rounds = ref(
 )
 
 /**
+ * 监听 props 变化，重新初始化状态
+ */
+watch(() => props.words, () => {
+  if (props.words.length > 0) {
+    // 重新初始化双槽
+    slotWordIndex.value = initSlotWordIndex()
+    swiperPane.value = 0
+    
+    // 重置 rounds 数组
+    rounds.value = wordList.value.map(() => ({
+      done: false,
+      wrong: [],
+    }))
+    
+    console.log('[Card] ========== Props 变化 ==========')
+    console.log('[Card] words.length:', props.words.length)
+    console.log('[Card] slotWordIndex:', slotWordIndex.value)
+    console.log('[Card] firstWord:', wordList.value[0])
+    console.log('[Card] firstWordOptions:', wordList.value[0]?.options)
+    console.log('[Card] ====================================')
+  }
+}, { immediate: true })
+
+/**
  * 未通过（passed === false）的题目，每次被「下一题」切到可见时重新作答
  *（曾选错/非首次点对后再来访，清空上一轮界面状态）
  */
@@ -129,7 +134,18 @@ const goNextUnpassed = () => {
   const visible = visibleWordIndex.value
   const target = resolveNextWordIndex(visible)
 
+  // 如果没有其他未完成的单词，检查当前单词是否已完成
   if (target === -1) {
+    const currentWord = wordList.value[visible]
+    
+    // 如果当前单词也未完成（答错了），重置当前单词的作答状态，让用户重新作答
+    if (currentWord && !currentWord.passed) {
+      console.log('[Card] ⚠️ 最后一个单词未完成，重置作答状态')
+      resetRoundIfNotPassed(visible)
+      return  // 停留在当前单词，但清空作答状态
+    }
+    
+    // 所有单词都完成了
     uni.showToast({
       title: '没有未通过的单词了',
       icon: 'none',
@@ -137,8 +153,19 @@ const goNextUnpassed = () => {
     return
   }
 
-  // 仅一道未通过且就是当前题时，不翻转两页（避免同题复制闪烁）
+  // 仅一道未通过且就是当前题时，需要判断是否需要重置
   if (target === visible) {
+    const currentWord = wordList.value[visible]
+    const r = rounds.value[visible]
+    
+    // 如果当前单词未完成且本轮已作答（答错后），重置作答状态
+    if (currentWord && !currentWord.passed && r.done) {
+      console.log('[Card] ⚠️ 唯一未完成的单词已作答，重置状态')
+      resetRoundIfNotPassed(visible)
+      return  // 停留在当前单词，但清空作答状态
+    }
+    
+    // 否则不翻转两页（避免同题复制闪烁）
     return
   }
 
@@ -209,12 +236,23 @@ const onCardTap = (pane, wIdx, idx) => {
   const opt = word.options[idx]
   if (isCorrectOption(opt, word)) {
     const hadWrong = r.wrong.length > 0
+
+    // ✅ 只有首次答对才标记为完成并触发事件
     if (!hadWrong) {
       word.passed = true
+
+      // ✅ 只有首次答对才触发 stage-complete 事件
+      emit('stage-complete', word._id, 'card', 'good')
+
+      console.log('[Card] ✅ 首次答对:', { wordId: word._id, rating: 'good' })
+    } else {
+      console.log('[Card] ⚠️ 答错后答对，不标记为完成:', { wordId: word._id })
     }
+
     r.done = true
   } else if (!r.wrong.includes(idx)) {
     r.wrong = [...r.wrong, idx]
+    console.log('[Card] 答错:', { wordId: word._id, option: opt.en })
   }
 }
 

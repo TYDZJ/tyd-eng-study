@@ -1,28 +1,317 @@
 <script setup>
 import TopNav from '@/components/top-nav.vue'
-
 import Card from './components/card.vue'
-import Learn from './components/learn.vue'
-import Spell from './components/spell.vue'
+// import Learn from './components/learn.vue'
+// import Spell from './components/spell.vue'
 
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { getOrCreateActiveSession } from '@/utils/wx-cloud-call'
+import { useUserStore } from '@/stores/user'
 
-const learnModel = ref('card')
+const userStore = useUserStore()
 
+// ==================== 状态管理 ====================
+const sessionId = ref('')
+const bookId = ref('cet4')
+const mode = ref('learn') // 'learn' | 'review'
+const words = ref([])
+const progressMap = ref({})
+const currentStage = ref('card') // 'card' | 'learn' | 'spell'
+const isLoading = ref(false)
+
+// ==================== 计算属性 ====================
+
+/**
+ * 已完成的单词数量（根据当前阶段动态计算）
+ */
+const finishedCount = computed(() => {
+  // 直接统计 progressMap 中标记为完成的数量
+  const progresses = Object.values(progressMap.value)
+  
+  if (progresses.length === 0) return 0
+  
+  return progresses.filter(progress => {
+    if (!progress) return false
+    
+    // 根据当前阶段判断是否完成
+    if (currentStage.value === 'card') {
+      return progress.card_done === true
+    } else if (currentStage.value === 'learn') {
+      return progress.learn_done === true
+    } else if (currentStage.value === 'spell') {
+      return progress.spell_done === true
+    }
+    return false
+  }).length
+})
+
+/**
+ * 总单词数
+ */
+const totalCount = computed(() => words.value.length)
+
+/**
+ * 进度百分比
+ */
+const progressPercent = computed(() => {
+  if (totalCount.value === 0) return 0
+  return Math.round((finishedCount.value / totalCount.value) * 100)
+})
+
+/**
+ * 判断当前阶段是否所有单词都已完成
+ */
+const isCurrentStageFinished = computed(() => {
+  const progresses = Object.values(progressMap.value)
+  
+  if (progresses.length === 0) return false
+  
+  // 检查 progressMap 中所有单词的当前阶段是否都已完成
+  return progresses.every(progress => {
+    if (!progress) return false
+    
+    if (currentStage.value === 'card') {
+      return progress.card_done === true
+    } else if (currentStage.value === 'learn') {
+      return progress.learn_done === true
+    } else if (currentStage.value === 'spell') {
+      return progress.spell_done === true
+    }
+    return false
+  })
+})
+
+// ==================== 生命周期 ====================
+onLoad(async (options) => {
+  // 接收路由参数
+  if (options.book_id) bookId.value = options.book_id
+  if (options.mode) mode.value = options.mode
+  
+  // 检查登录状态
+  if (!userStore.isLoggedIn) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => {
+      uni.navigateBack()
+    }, 1500)
+    return
+  }
+  
+  // 初始化会话
+  await initSession()
+})
+
+// ==================== 核心方法 ====================
+
+/**
+ * 初始化或恢复会话
+ */
+async function initSession() {
+  isLoading.value = true
+  try {
+    const result = await getOrCreateActiveSession({
+      bookId: bookId.value,
+      mode: mode.value,
+      sessionSize: 20
+    })
+    
+    console.log('[Learn] ========== 云函数返回 ==========')
+    console.log('[Learn]', result)
+    
+    if (result.code !== 0) {
+      throw new Error(result.message || '获取会话失败')
+    }
+    
+    const data = result.data
+    
+    if (!data.session_id) {
+      // 没有可学习的单词
+      uni.showToast({ title: data.message || '暂无可学习的单词', icon: 'none' })
+      setTimeout(() => {
+        uni.navigateBack()
+      }, 1500)
+      return
+    }
+    
+    // 更新状态
+    sessionId.value = data.session_id
+    words.value = data.words || []
+    progressMap.value = data.progress_map || {}
+    currentStage.value = data.current_stage || (mode.value === 'learn' ? 'card' : 'learn')
+    
+    console.log('[Learn] ========== 会话数据详情 ==========')
+    console.log('[Learn] sessionId:', sessionId.value)
+    console.log('[Learn] wordCount:', words.value.length)
+    console.log('[Learn] stage:', currentStage.value)
+    console.log('[Learn] firstWord:', words.value[0])
+    console.log('[Learn] firstWordOptions:', words.value[0]?.options)
+    console.log('[Learn] progressMapKeys:', Object.keys(progressMap.value))
+    console.log('[Learn] ====================================')
+    
+  } catch (error) {
+    console.error('[Learn] 初始化会话失败:', error)
+    uni.showToast({ title: '加载失败，请重试', icon: 'none' })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+/**
+ * 阶段完成回调（由子组件触发）
+ * @param {String} wordId - 单词ID
+ * @param {String} stage - 完成的阶段
+ * @param {String} rating - 评分
+ */
+async function handleStageComplete(wordId, stage, rating) {
+  console.log('[Learn] 阶段完成:', { wordId, stage, rating })
+  
+  // TODO: 调用 submitWordProgress 提交到云端
+  // const result = await submitWordProgress({...})
+  
+  // 临时方案：直接更新本地进度
+  if (!progressMap.value[wordId]) {
+    progressMap.value[wordId] = {
+      card_done: false,
+      learn_done: false,
+      spell_done: false,
+      latest_rating: null
+    }
+  }
+  
+  // 标记当前阶段完成
+  if (stage === 'card') {
+    progressMap.value[wordId].card_done = true
+  } else if (stage === 'learn') {
+    progressMap.value[wordId].learn_done = true
+  } else if (stage === 'spell') {
+    progressMap.value[wordId].spell_done = true
+  }
+  
+  progressMap.value[wordId].latest_rating = rating
+  
+  console.log('[Learn] 更新后进度:', progressMap.value[wordId])
+  console.log('[Learn] 当前阶段完成状态:', isCurrentStageFinished.value)
+  console.log('[Learn] 当前阶段进度:', `${finishedCount.value}/${totalCount.value}`)
+  
+  // 判断当前阶段是否所有单词都完成了
+  if (isCurrentStageFinished.value) {
+    console.log('[Learn] ✅ 当前阶段所有单词已完成，等待用户点击下一阶段按钮')
+    // 不自动切换，显示提示
+    uni.showToast({ 
+      title: '本阶段完成！点击下方按钮进入下一阶段', 
+      icon: 'none',
+      duration: 2000
+    })
+  }
+}
+
+/**
+ * 用户手动点击进入下一阶段
+ */
+function handleNextStage() {
+  console.log('[Learn] 用户点击下一阶段按钮')
+  moveToNextStage()
+}
+
+/**
+ * 进入下一阶段
+ */
+function moveToNextStage() {
+  console.log('[Learn] 当前阶段:', currentStage.value)
+  
+  if (mode.value === 'learn') {
+    if (currentStage.value === 'card') {
+      currentStage.value = 'learn'
+      console.log('[Learn] → 切换到 learn 阶段')
+    } else if (currentStage.value === 'learn') {
+      currentStage.value = 'spell'
+      console.log('[Learn] → 切换到 spell 阶段')
+    } else if (currentStage.value === 'spell') {
+      // 所有阶段完成
+      console.log('[Learn] → 所有阶段完成')
+      handleSessionComplete()
+    }
+  } else {
+    // 复习模式
+    if (currentStage.value === 'learn') {
+      currentStage.value = 'spell'
+      console.log('[Learn] → 切换到 spell 阶段（复习模式）')
+    } else if (currentStage.value === 'spell') {
+      console.log('[Learn] → 所有阶段完成（复习模式）')
+      handleSessionComplete()
+    }
+  }
+}
+
+/**
+ * 处理会话完成
+ */
+function handleSessionComplete() {
+  console.log('[Learn] 🎉 会话完成！')
+  
+  uni.showModal({
+    title: '恭喜完成！',
+    content: `本组 ${totalCount.value} 个单词已全部学习完成`,
+    showCancel: false,
+    confirmText: '返回首页',
+    success: () => {
+      uni.navigateBack()
+    }
+  })
+}
 </script>
 
 <template>
   <view class="learn-box">
+    <!-- 顶部导航 -->
     <TopNav />
-    <Card class="learn-item" v-if="learnModel === 'card'" />
-    <Learn class="learn-item" v-if="learnModel === 'learn'" />
-    <Spell class="learn-item" v-if="learnModel === 'spell'" />
-    <view class="change-box">
-      <button @click="learnModel = 'card'">卡片</button>
-      <button @click="learnModel = 'learn'">学习</button>
-      <button @click="learnModel = 'spell'">拼写</button>
+    
+    <!-- 进度条和阶段切换按钮 -->
+    <view class="progress-bar" v-if="!isLoading && words.length > 0">
+      <view class="progress-info">
+        <text class="progress-text">{{ finishedCount }}/{{ totalCount }}</text>
+        <text class="stage-tag">{{ currentStage === 'card' ? '卡片' : currentStage === 'learn' ? '认读' : '拼写' }}</text>
+      </view>
+      <view class="progress-track">
+        <view class="progress-fill" :style="{ width: progressPercent + '%' }"></view>
+      </view>
+      
+      <!-- 下一阶段按钮（仅在当前阶段完成时显示） -->
+      <view v-if="isCurrentStageFinished && currentStage !== 'spell'" class="next-stage-btn">
+        <button @click="handleNextStage">
+          {{ currentStage === 'card' ? '进入认读阶段' : '进入拼写阶段' }} →
+        </button>
+      </view>
     </view>
+    
+    <!-- 加载状态 -->
+    <view class="loading-box" v-if="isLoading">
+      <u-loading-icon mode="circle" size="40"></u-loading-icon>
+      <text class="loading-text">加载中...</text>
+    </view>
+    
+    <!-- 学习内容 - 暂时只显示 Card 组件 -->
+    <view class="learn-item" v-else-if="words.length > 0">
+      <Card 
+        v-if="currentStage === 'card'" 
+        :words="words"
+        :progress-map="progressMap"
+        :session-id="sessionId"
+        :book-id="bookId"
+        @stage-complete="handleStageComplete"
+      />
+      
+      <!-- TODO: 后续添加 Learn 和 Spell 组件 -->
+      <view v-else class="placeholder-box">
+        <text>{{ currentStage }} 阶段待实现</text>
+      </view>
+    </view>
+    
+    <!-- 空状态 -->
+    <view class="empty-box" v-else>
+      <text class="empty-text">暂无学习内容</text>
+    </view>
+    
     <u-safe-bottom />
   </view>
 </template>
@@ -33,26 +322,114 @@ const learnModel = ref('card')
   flex-direction: column;
   height: 100vh;
   width: 100%;
+  background-color: #f5f5f5;
+}
 
-  .learn-item {
-    flex: 1;
-    padding: 0 30rpx;
+/* 进度条 */
+.progress-bar {
+  padding: 20rpx 30rpx;
+  background-color: #fff;
+  border-bottom: 1rpx solid #eee;
+  position: relative;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.progress-text {
+  font-size: 28rpx;
+  color: #666;
+  font-weight: 500;
+}
+
+.stage-tag {
+  font-size: 24rpx;
+  color: #1890ff;
+  background-color: #e6f7ff;
+  padding: 4rpx 16rpx;
+  border-radius: 8rpx;
+}
+
+.progress-track {
+  height: 8rpx;
+  background-color: #f0f0f0;
+  border-radius: 4rpx;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1890ff, #52c41a);
+  border-radius: 4rpx;
+  transition: width 0.3s ease;
+}
+
+/* 下一阶段按钮 */
+.next-stage-btn {
+  margin-top: 16rpx;
+  
+  button {
+    width: 100%;
+    background: linear-gradient(90deg, #1890ff, #52c41a);
+    color: #fff;
+    border: none;
+    border-radius: 8rpx;
+    font-size: 28rpx;
+    padding: 16rpx 0;
+    font-weight: 500;
+    
+    &:active {
+      opacity: 0.8;
+    }
   }
 }
 
-.change-box {
-  position: absolute;
-  top: 70%;
-  left: 0;
-  width: 100%;
+/* 加载状态 */
+.loading-box {
+  flex: 1;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 30rpx;
+  gap: 20rpx;
+}
 
-  button { 
-    margin: 0;
-  }
+.loading-text {
+  font-size: 28rpx;
+  color: #999;
+}
+
+/* 学习内容 */
+.learn-item {
+  flex: 1;
+  padding: 0 30rpx;
+  overflow: hidden;
+}
+
+/* 占位符 */
+.placeholder-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: #999;
+}
+
+/* 空状态 */
+.empty-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-text {
+  font-size: 32rpx;
+  color: #999;
 }
 </style>

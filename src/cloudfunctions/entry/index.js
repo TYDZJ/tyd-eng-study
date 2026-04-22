@@ -8,6 +8,7 @@ const settingsHandlers = require("./handlers/settings");
 const dashboardHandlers = require("./handlers/dashboard");
 const learningStatsHandlers = require("./handlers/learning_stats");
 const bookSettingsHandlers = require("./handlers/book_settings");
+const learningSessionHandlers = require("./handlers/learning_session");
 
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV,
@@ -42,6 +43,13 @@ const actionMap = {
   getCurrentBook: bookSettingsHandlers.getCurrentBook,
   setCurrentBook: bookSettingsHandlers.setCurrentBook,
   updateBookProgress: bookSettingsHandlers.updateBookProgress,
+  // Learning session handlers (学习会话管理相关)
+  getOrCreateActiveSession: learningSessionHandlers.getOrCreateActiveSession,
+  submitWordProgress: learningSessionHandlers.submitWordProgress,
+  finishSession: learningSessionHandlers.finishSession,
+  getSessionState: learningSessionHandlers.getSessionState,
+  abandonSession: learningSessionHandlers.abandonSession,
+  getTodayPlan: learningSessionHandlers.getTodayPlan,
 };
 
 // 白名单 action：不需要 session_token 也可调用。
