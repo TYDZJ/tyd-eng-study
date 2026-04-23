@@ -107,8 +107,8 @@ onLoad(async (options) => {
 async function initSession() {
   isLoading.value = true
   try {
+    // ✅ 不传 bookId，由后端从 user_book_settings 获取用户当前词书
     const result = await getOrCreateActiveSession({
-      bookId: bookId.value,
       mode: mode.value,
       sessionSize: 20
     })

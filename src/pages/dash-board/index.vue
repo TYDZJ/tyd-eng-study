@@ -160,17 +160,20 @@ const handleChangeBook = () => {
 
 // 获取用户统计数据 (核心数据同步函数)
 const fetchStatistics = async () => {
+  uni.showLoading({ title: '加载中...' });
   try {
     // 1. 并行请求所有数据，提高加载速度
-    const [statsRes, signedRes, bookRes] = await Promise.all([
+    const [statsRes, signedRes, bookRes, bookListRes] = await Promise.all([
       callEntryCloud({ action: 'getUserStatistics' }),
       callEntryCloud({ action: 'getSignedDates' }),
-      callEntryCloud({ action: 'getCurrentBook' })
+      callEntryCloud({ action: 'getCurrentBook' }),
+      callEntryCloud({ action: 'getBookList' })  // ✅ 同时获取词书列表
     ]);
 
     const statsResult = statsRes?.result || {};
     const signedResult = signedRes?.result || {};
     const bookResult = bookRes?.result || {};
+    const bookListResult = bookListRes?.result || {};
 
     // 2. 处理学习统计
     if (statsResult.code === 0 && statsResult.data) {
@@ -209,11 +212,15 @@ const fetchStatistics = async () => {
     
     // 4. 处理词书信息
     if (bookResult.code === 0 && bookResult.data) {
+      // ✅ 从后端返回的词书列表中查找封面颜色
+      const books = bookListResult.data?.books || [];
+      const bookInfo = books.find(book => book.book_id === bookResult.data.book_id);
+      
       currentBook.value = {
         id: bookResult.data.book_id,
         title: bookResult.data.book_name,
         desc: bookResult.data.book_desc,
-        cover: '', // TODO: 后续可以从词书配置中获取封面
+        cover: bookInfo?.cover_color || '', // 使用后端返回的封面颜色
         learnedCount: bookResult.data.learned_count || 0,
         totalCount: bookResult.data.total_count || 0
       };
@@ -228,31 +235,33 @@ const fetchStatistics = async () => {
     console.error('获取数据异常:', error);
     uni.showToast({ title: '数据同步失败', icon: 'none' });
   }
+  finally {
+    uni.hideLoading();
+  }
 };
 
 // 打开词书选择弹窗
 const openBookPicker = async () => {
   showBookPicker.value = true;
   
-  // 如果词书列表为空，从后端获取
-  if (bookList.value.length === 0) {
-    uni.showLoading({ title: '加载中...' });
+  // ✅ 每次都从后端获取最新的词书列表
+  uni.showLoading({ title: '加载中...' });
+  
+  try {
+    const res = await callEntryCloud({ action: 'getBookList' });
+    const result = res?.result || {};
     
-    try {
-      const res = await callEntryCloud({ action: 'getBookList' });
-      const result = res?.result || {};
-      
-      if (result.code === 0 && result.data?.books) {
-        bookList.value = result.data.books;
-      } else {
-        uni.showToast({ title: result.message || '获取词书列表失败', icon: 'none' });
-      }
-    } catch (error) {
-      console.error('获取词书列表异常:', error);
-      uni.showToast({ title: '网络错误', icon: 'none' });
-    } finally {
-      uni.hideLoading();
+    if (result.code === 0 && result.data?.books) {
+      bookList.value = result.data.books;
+      console.log('词书列表:', bookList.value);
+    } else {
+      uni.showToast({ title: result.message || '获取词书列表失败', icon: 'none' });
     }
+  } catch (error) {
+    console.error('获取词书列表异常:', error);
+    uni.showToast({ title: '网络错误', icon: 'none' });
+  } finally {
+    uni.hideLoading();
   }
 };
 
@@ -264,6 +273,7 @@ const closeBookPicker = () => {
 // 确认选择词书
 const confirmBookSelection = async (book) => {
   uni.showLoading({ title: '设置中...' });
+  console.log('选择的词书:', book);
   
   try {
     const res = await callEntryCloud({
@@ -273,12 +283,12 @@ const confirmBookSelection = async (book) => {
     const result = res?.result || {};
     
     if (result.code === 0) {
-      // 更新本地词书信息
+      // ✅ 使用后端返回的词书信息（已包含封面颜色）
       currentBook.value = {
         id: book.book_id,
         title: book.book_name,
         desc: book.book_desc,
-        cover: '',
+        cover: book.cover_color || '',  // 直接使用后端返回的封面颜色
         learnedCount: 0, // 新词书进度为 0
         totalCount: book.total_count
       };
@@ -287,6 +297,9 @@ const confirmBookSelection = async (book) => {
       showBookPicker.value = false;
       
       uni.showToast({ title: '词书设置成功', icon: 'success' });
+      
+      // ✅ 重新获取统计数据，确保数据同步
+      await fetchStatistics();
     } else {
       uni.showToast({ title: result.message || '设置失败', icon: 'none' });
     }
@@ -436,11 +449,11 @@ onShow(async () => {
           class="book-item"
           @click="confirmBookSelection(book)"
         >
-          <view class="book-cover" :style="{ background: book.cover_color }">
+          <view class="book-cover" :style="{ background: book.cover_color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }">
             <view class="book-info-overlay">
-              <text class="book-name">{{ book.book_name }}</text>
-              <text class="book-description">{{ book.book_desc }}</text>
-              <text class="book-total">总词数：{{ book.total_count }}</text>
+              <text class="book-name">{{ book.book_name || '未知词书' }}</text>
+              <text class="book-description">{{ book.book_desc || '暂无描述' }}</text>
+              <text class="book-total">总词数：{{ book.total_count  || 0 }}</text>
             </view>
           </view>
         </view>

@@ -53,8 +53,10 @@ function updateSM2State(wordState, rating) {
   ease_factor = ease_factor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
   ease_factor = Math.max(1.3, Math.min(2.5, ease_factor)); // 限制范围 [1.3, 2.5]
 
-  // 计算下次复习时间
-  const next_review_at = new Date(Date.now() + interval_days * 24 * 60 * 60 * 1000);
+  // ⭐ 计算下次复习时间（归位到当天凌晨0点）
+  const futureDate = new Date(Date.now() + interval_days * 24 * 60 * 60 * 1000);  // 先计算准确的未来时间
+  futureDate.setHours(0, 0, 0, 0);  // ⭐ 再归位到那天的凌晨0点
+  const next_review_at = futureDate;
 
   // 确定状态
   let status = "learning";
@@ -84,7 +86,26 @@ function updateSM2State(wordState, rating) {
 async function getOrCreateActiveSession({ db, _, event, auth }) {
   try {
     const openid = auth.openid;
-    const bookId = String(event.book_id || "cet4").trim();
+    const userId = auth.user?.user_id || openid;
+    
+    // ✅ 从数据库获取用户当前词书，而不是前端传递
+    let bookId;
+    if (event.book_id) {
+      // 如果前端传了 book_id（兼容旧代码），使用它
+      bookId = String(event.book_id).trim();
+    } else {
+      // ✅ 从 user_book_settings 获取用户当前词书
+      const settingsRes = await db.collection('user_book_settings')
+        .where({ user_id: userId })
+        .limit(1)
+        .get();
+      
+      const settings = (settingsRes.data || [])[0];
+      bookId = settings?.book_id || 'cet4';  // 默认 cet4
+      
+      console.log(`[getOrCreateActiveSession] 从数据库获取词书: ${bookId}`);
+    }
+    
     const mode = String(event.mode || "learn").trim();
     const sessionSize = Math.min(20, Math.max(1, Number(event.session_size) || 20));
 
@@ -587,7 +608,26 @@ async function submitWordProgress({ db, _, event, auth }) {
       }
     }).length;
 
-    // 8.2 更新会话
+    // 8.2 计算当前应该处于哪个阶段
+    let newCurrentStage = session.current_stage;
+    
+    if (session.mode === "learn") {
+      // 学习模式：检查是否所有单词都完成了 card 阶段
+      const allCardDone = progressList.every(p => p.card_done);
+      const hasAnyLearnStarted = progressList.some(p => p.learn_done);
+      
+      if (allCardDone && !hasAnyLearnStarted) {
+        // 所有单词都完成了 card，但还没有开始 learn → 切换到 learn 阶段
+        newCurrentStage = "learn";
+        console.log(`[submitWordProgress] 所有单词完成 Card 阶段，切换到 Learn 阶段`);
+      } else if (allCardDone && hasAnyLearnStarted) {
+        // 已经开始 learn 阶段，保持 learn
+        newCurrentStage = "learn";
+      }
+    }
+    // 复习模式始终是 learn 阶段，不需要切换
+
+    // 8.3 更新会话
     const isFinished = finishedCount >= session.target_count;
     await db
       .collection("study_sessions")
@@ -595,6 +635,7 @@ async function submitWordProgress({ db, _, event, auth }) {
       .update({
         data: {
           finished_count: finishedCount,
+          current_stage: newCurrentStage,  // ✅ 更新当前阶段
           status: isFinished ? "finished" : "running",
           updated_at: now,
         },
