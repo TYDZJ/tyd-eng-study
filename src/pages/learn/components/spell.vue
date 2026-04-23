@@ -1,46 +1,60 @@
 <script setup>
-import { ref } from 'vue'
-
-// 模拟数据
-const wordList = ref([
-  { cn: '苹果', en: 'apple', passed: false },
-  { cn: '香蕉', en: 'banana', passed: false },
-  { cn: '橙子', en: 'orange', passed: false },
-  { cn: '葡萄', en: 'grape', passed: false },
-  { cn: '西瓜', en: 'watermelon', passed: false },
-  // { cn: '苹果', en: 'apple', passed: false },
-  // { cn: '香蕉', en: 'banana', passed: false },
-  // { cn: '橙子', en: 'orange', passed: false },
-  // { cn: '葡萄', en: 'grape', passed: false },
-  // { cn: '西瓜', en: 'watermelon', passed: false },
-  // { cn: '苹果', en: 'apple', passed: false },
-  // { cn: '香蕉', en: 'banana', passed: false },
-  // { cn: '橙子', en: 'orange', passed: false },
-  // { cn: '葡萄', en: 'grape', passed: false },
-  // { cn: '西瓜', en: 'watermelon', passed: false },
-  // { cn: '苹果', en: 'apple', passed: false },
-  // { cn: '香蕉', en: 'banana', passed: false },
-  // { cn: '橙子', en: 'orange', passed: false },
-  // { cn: '葡萄', en: 'grape', passed: false },
-  // { cn: '西瓜', en: 'watermelon', passed: false },
-])
-
-// 当前轮播索引
-const currentIndex = ref(0)
+import { ref, computed, watch } from 'vue'
 
 /**
- * 每题独立状态（避免所有 swiper-item 共用一份 userInput/showResult 导致离屏页与当前页同态）
+ * 拼写补充模块（纯前端，不提交后端）
+ * - 输入数据来自父页面同一会话 words
+ * - 拼写练习结果仅本地生效，用于收尾巩固
+ * - 退出后不保留，下次不会恢复到 spell 阶段
  */
-const rounds = ref(
-  wordList.value.map(() => ({
+const props = defineProps({
+  words: {
+    type: Array,
+    default: () => [],
+  },
+})
+
+const emit = defineEmits(['done'])
+
+function formatWordCn(word) {
+  const tran = word.translations?.[0]
+  if (!tran) return ''
+  return `${tran.type ? `${tran.type} ` : ''}${tran.translation || ''}`.trim()
+}
+
+const wordList = ref([])
+const currentIndex = ref(0)
+
+const rounds = ref([])
+const isProgrammaticChange = ref(false)
+
+function buildLocalWordList() {
+  wordList.value = props.words.map((word) => ({
+    _id: word._id,
+    en: word.word || '',
+    cn: formatWordCn(word),
+    passed: false,
+  }))
+  rounds.value = wordList.value.map(() => ({
     userInput: '',
     showResult: false,
     isFirstAttempt: true,
-  })),
+  }))
+  currentIndex.value = 0
+}
+
+watch(
+  () => props.words,
+  () => {
+    buildLocalWordList()
+  },
+  { immediate: true, deep: true },
 )
 
-// 防止循环触发的标志位
-const isProgrammaticChange = ref(false)
+const allDone = computed(() => {
+  if (wordList.value.length === 0) return false
+  return wordList.value.every((w) => w.passed)
+})
 
 /** 某题的逐字对比结果 */
 const getCompareResult = (wIdx) => {
@@ -113,14 +127,7 @@ const handleConfirm = (wIdx) => {
 
 // 切换到下一个单词（点击按钮）
 const handleNext = () => {
-  // 查找下一个未通过的单词
   goNextUnpassed('forward')
-}
-
-// 切换到上一个单词（手动左滑）
-const handlePrev = () => {
-  // 查找上一个未通过的单词
-  goNextUnpassed('backward')
 }
 
 // 重置某一题的状态（重试）
@@ -162,14 +169,11 @@ const onSwiperChange = (e) => {
   // 每题状态在 rounds[wIdx] 中独立保存，切换时不清空，避免离屏页与当前页绑同一数据
 }
 
-// 前往下一个未通过的单词的索引
 const goNextUnpassed = (direction = 'forward') => {
   const startIndex = currentIndex.value
   let targetIndex = -1
   
-  // 先查找后面的未通过单词
   if (direction === 'forward') targetIndex = findForwardIndex(startIndex)
-  // 再查找前面的未通过单词
   if (targetIndex === -1) targetIndex = findFromStartIndex()
   
   if (targetIndex !== -1) {
@@ -211,10 +215,13 @@ const findBackwardIndex = (startIndex) => {
   return -1;
 }
 
-// 处理自定义指示器点击
 const handleIndicatorClick = (index) => {
   isProgrammaticChange.value = true
   currentIndex.value = index
+}
+
+function handleDoneClick() {
+  emit('done')
 }
 
 </script>
@@ -329,6 +336,11 @@ const handleIndicatorClick = (index) => {
       >
         <text>{{ index + 1 }}</text>
       </view>
+    </view>
+
+    <view v-if="allDone" class="spell-finish-box">
+      <button class="spell-finish-btn" @click="handleDoneClick">完成拼写并返回</button>
+      <text class="spell-finish-tip">拼写为补充练习，不计入学习进度</text>
     </view>
   </view>
 </template>
@@ -569,5 +581,31 @@ const handleIndicatorClick = (index) => {
       transform: scale(0.9);
     }
   }
+}
+
+.spell-finish-box {
+  width: 100%;
+  padding: 12rpx 0 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  align-items: center;
+}
+
+.spell-finish-btn {
+  width: 80%;
+  max-width: 420rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  background: linear-gradient(90deg, #1890ff, #52c41a);
+  color: #fff;
+  border: none;
+  border-radius: 10rpx;
+  font-size: 28rpx;
+}
+
+.spell-finish-tip {
+  font-size: 22rpx;
+  color: #999;
 }
 </style>

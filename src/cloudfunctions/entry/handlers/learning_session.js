@@ -160,7 +160,6 @@ async function getOrCreateActiveSession({ db, _, event, auth }) {
           word_id: wordId,
           card_done: mode === "review", // 复习模式跳过 card 阶段
           learn_done: false,
-          spell_done: false,
           latest_rating: null,
           updated_at: now,
         },
@@ -205,7 +204,6 @@ async function getSessionWithWords(db, _, sessionId) {
     progressMap[p.word_id] = {
       card_done: p.card_done,
       learn_done: p.learn_done,
-      spell_done: p.spell_done,
       latest_rating: p.latest_rating,
     };
   });
@@ -424,7 +422,7 @@ async function submitWordProgress({ db, _, event, auth }) {
       return fail(CODE.BAD_REQUEST, "缺少必要参数");
     }
 
-    if (!["card", "learn", "spell"].includes(stage)) {
+    if (!["card", "learn"].includes(stage)) {
       return fail(CODE.STAGE_INVALID, MESSAGE.STAGE_INVALID);
     }
 
@@ -495,11 +493,6 @@ async function submitWordProgress({ db, _, event, auth }) {
       if (rating) {
         updateData.latest_rating = rating;
       }
-    } else if (stage === "spell") {
-      updateData.spell_done = true;
-      if (rating) {
-        updateData.latest_rating = rating;
-      }
     }
 
     await db
@@ -528,9 +521,9 @@ async function submitWordProgress({ db, _, event, auth }) {
       });
     }
 
-    // 7. 触发 SM2 算法更新（仅 learn/review 阶段且有 rating）
+    // 7. 触发 SM2 算法更新（仅 learn 阶段且有 rating）
     let nextReviewAt = null;
-    if ((stage === "learn" || stage === "spell") && rating) {
+    if (stage === "learn" && rating) {
       // 查询或创建 user_word_state
       const stateRes = await db
         .collection("user_word_state")
@@ -588,9 +581,9 @@ async function submitWordProgress({ db, _, event, auth }) {
     const finishedCount = progressList.filter((p) => {
       // 判断单词是否完成所有阶段
       if (session.mode === "learn") {
-        return p.card_done && p.learn_done && p.spell_done;
+        return p.card_done && p.learn_done;
       } else {
-        return p.learn_done && p.spell_done;
+        return p.learn_done;
       }
     }).length;
 
@@ -616,7 +609,6 @@ async function submitWordProgress({ db, _, event, auth }) {
       word_progress: {
         card_done: wordProgress?.card_done || false,
         learn_done: wordProgress?.learn_done || false,
-        spell_done: wordProgress?.spell_done || false,
         latest_rating: wordProgress?.latest_rating || null,
       },
       session_progress: {

@@ -1,12 +1,12 @@
 <script setup>
 import TopNav from '@/components/top-nav.vue'
 import Card from './components/card.vue'
-// import Learn from './components/learn.vue'
-// import Spell from './components/spell.vue'
+import Learn from './components/learn.vue'
+import Spell from './components/spell.vue'
 
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { getOrCreateActiveSession } from '@/utils/wx-cloud-call'
+import { getOrCreateActiveSession, submitWordProgress } from '@/utils/wx-cloud-call'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -37,12 +37,8 @@ const finishedCount = computed(() => {
     // 根据当前阶段判断是否完成
     if (currentStage.value === 'card') {
       return progress.card_done === true
-    } else if (currentStage.value === 'learn') {
-      return progress.learn_done === true
-    } else if (currentStage.value === 'spell') {
-      return progress.spell_done === true
     }
-    return false
+    return progress.learn_done === true
   }).length
 })
 
@@ -73,13 +69,15 @@ const isCurrentStageFinished = computed(() => {
     
     if (currentStage.value === 'card') {
       return progress.card_done === true
-    } else if (currentStage.value === 'learn') {
-      return progress.learn_done === true
-    } else if (currentStage.value === 'spell') {
-      return progress.spell_done === true
     }
-    return false
+    return progress.learn_done === true
   })
+})
+
+const stageLabel = computed(() => {
+  if (currentStage.value === 'card') return '卡片'
+  if (currentStage.value === 'learn') return '认读'
+  return '拼写（补充）'
 })
 
 // ==================== 生命周期 ====================
@@ -162,85 +160,107 @@ async function initSession() {
  * @param {String} stage - 完成的阶段
  * @param {String} rating - 评分
  */
-async function handleStageComplete(wordId, stage, rating) {
+/**
+ * @param {string} wordId
+ * @param {'card'|'learn'} stage
+ * @param {'again'|'hard'|'good'|'easy'|null} rating
+ * @param {{ onSuccess?: () => void, onError?: () => void }} [callbacks] learn 阶段提交成功后翻页用
+ */
+async function handleStageComplete(wordId, stage, rating, callbacks) {
   console.log('[Learn] 阶段完成:', { wordId, stage, rating })
-  
-  // TODO: 调用 submitWordProgress 提交到云端
-  // const result = await submitWordProgress({...})
-  
-  // 临时方案：直接更新本地进度
-  if (!progressMap.value[wordId]) {
-    progressMap.value[wordId] = {
-      card_done: false,
-      learn_done: false,
-      spell_done: false,
-      latest_rating: null
-    }
+  if (!['card', 'learn'].includes(stage)) {
+    callbacks?.onError?.()
+    return
   }
-  
-  // 标记当前阶段完成
-  if (stage === 'card') {
-    progressMap.value[wordId].card_done = true
-  } else if (stage === 'learn') {
-    progressMap.value[wordId].learn_done = true
-  } else if (stage === 'spell') {
-    progressMap.value[wordId].spell_done = true
+
+  if (!sessionId.value) {
+    uni.showToast({ title: '会话无效', icon: 'none' })
+    callbacks?.onError?.()
+    return
   }
-  
-  progressMap.value[wordId].latest_rating = rating
-  
-  console.log('[Learn] 更新后进度:', progressMap.value[wordId])
-  console.log('[Learn] 当前阶段完成状态:', isCurrentStageFinished.value)
-  console.log('[Learn] 当前阶段进度:', `${finishedCount.value}/${totalCount.value}`)
-  
-  // 判断当前阶段是否所有单词都完成了
-  if (isCurrentStageFinished.value) {
-    console.log('[Learn] ✅ 当前阶段所有单词已完成，等待用户点击下一阶段按钮')
-    // 不自动切换，显示提示
-    uni.showToast({ 
-      title: '本阶段完成！点击下方按钮进入下一阶段', 
-      icon: 'none',
-      duration: 2000
+
+  try {
+    const result = await submitWordProgress({
+      sessionId: sessionId.value,
+      bookId: bookId.value,
+      wordId,
+      stage,
+      rating: rating || undefined,
     })
+
+    if (!result || result.code !== 0) {
+      throw new Error(result?.message || '提交失败')
+    }
+
+    const data = result.data || {}
+
+    if (!progressMap.value[wordId]) {
+      progressMap.value[wordId] = {
+        card_done: false,
+        learn_done: false,
+        latest_rating: null,
+      }
+    }
+
+    if (data.word_progress) {
+      Object.assign(progressMap.value[wordId], data.word_progress)
+    } else {
+      if (stage === 'card') progressMap.value[wordId].card_done = true
+      else if (stage === 'learn') progressMap.value[wordId].learn_done = true
+      if (rating) progressMap.value[wordId].latest_rating = rating
+    }
+
+    console.log('[Learn] 更新后进度:', progressMap.value[wordId])
+    console.log('[Learn] 当前阶段完成状态:', isCurrentStageFinished.value)
+    console.log('[Learn] 当前阶段进度:', `${finishedCount.value}/${totalCount.value}`)
+
+    callbacks?.onSuccess?.()
+
+    if (isCurrentStageFinished.value) {
+      console.log('[Learn] ✅ 当前阶段所有单词已完成，等待用户点击下一阶段按钮')
+      uni.showToast({
+        title: '本阶段完成！点击下方按钮进入下一阶段',
+        icon: 'none',
+        duration: 2000,
+      })
+    }
+  } catch (error) {
+    console.error('[Learn] submitWordProgress 失败:', error)
+    uni.showToast({
+      title: error?.message || '提交失败，请重试',
+      icon: 'none',
+    })
+    callbacks?.onError?.()
   }
 }
 
 /**
- * 用户手动点击进入下一阶段
+ * 用户手动点击进入下一阶段（仅 card -> learn）
  */
 function handleNextStage() {
-  console.log('[Learn] 用户点击下一阶段按钮')
-  moveToNextStage()
+  if (currentStage.value === 'card') {
+    currentStage.value = 'learn'
+    console.log('[Learn] → 切换到 learn 阶段')
+  }
 }
 
 /**
- * 进入下一阶段
+ * 进入 spell（可选补充模块，不计后端进度）
  */
-function moveToNextStage() {
-  console.log('[Learn] 当前阶段:', currentStage.value)
-  
-  if (mode.value === 'learn') {
-    if (currentStage.value === 'card') {
-      currentStage.value = 'learn'
-      console.log('[Learn] → 切换到 learn 阶段')
-    } else if (currentStage.value === 'learn') {
-      currentStage.value = 'spell'
-      console.log('[Learn] → 切换到 spell 阶段')
-    } else if (currentStage.value === 'spell') {
-      // 所有阶段完成
-      console.log('[Learn] → 所有阶段完成')
-      handleSessionComplete()
-    }
-  } else {
-    // 复习模式
-    if (currentStage.value === 'learn') {
-      currentStage.value = 'spell'
-      console.log('[Learn] → 切换到 spell 阶段（复习模式）')
-    } else if (currentStage.value === 'spell') {
-      console.log('[Learn] → 所有阶段完成（复习模式）')
-      handleSessionComplete()
-    }
-  }
+function enterSpell() {
+  currentStage.value = 'spell'
+  uni.showToast({
+    title: '拼写为补充练习，不计入进度',
+    icon: 'none',
+  })
+}
+
+function finishWithoutSpell() {
+  handleSessionComplete()
+}
+
+function handleSpellDone() {
+  handleSessionComplete()
 }
 
 /**
@@ -270,17 +290,28 @@ function handleSessionComplete() {
     <view class="progress-bar" v-if="!isLoading && words.length > 0">
       <view class="progress-info">
         <text class="progress-text">{{ finishedCount }}/{{ totalCount }}</text>
-        <text class="stage-tag">{{ currentStage === 'card' ? '卡片' : currentStage === 'learn' ? '认读' : '拼写' }}</text>
+        <text class="stage-tag">{{ stageLabel }}</text>
       </view>
       <view class="progress-track">
         <view class="progress-fill" :style="{ width: progressPercent + '%' }"></view>
       </view>
       
-      <!-- 下一阶段按钮（仅在当前阶段完成时显示） -->
-      <view v-if="isCurrentStageFinished && currentStage !== 'spell'" class="next-stage-btn">
+      <!-- card 阶段完成后：进入 learn -->
+      <view v-if="isCurrentStageFinished && currentStage === 'card'" class="next-stage-btn">
         <button @click="handleNextStage">
-          {{ currentStage === 'card' ? '进入认读阶段' : '进入拼写阶段' }} →
+          进入认读阶段 →
         </button>
+      </view>
+
+      <!-- learn 阶段完成后：spell 可选，不计后端进度 -->
+      <view v-if="isCurrentStageFinished && currentStage === 'learn'" class="next-stage-actions">
+        <button class="next-stage-btn__primary" @click="enterSpell">
+          进入拼写（可选）
+        </button>
+        <button class="next-stage-btn__ghost" @click="finishWithoutSpell">
+          直接完成并返回
+        </button>
+        <text class="next-stage-tip">拼写仅补充练习，不计入学习进度，退出后不保留</text>
       </view>
     </view>
     
@@ -301,9 +332,23 @@ function handleSessionComplete() {
         @stage-complete="handleStageComplete"
       />
       
-      <!-- TODO: 后续添加 Learn 和 Spell 组件 -->
+      <Learn
+        v-else-if="currentStage === 'learn'"
+        :words="words"
+        :progress-map="progressMap"
+        :session-id="sessionId"
+        :book-id="bookId"
+        @stage-complete="handleStageComplete"
+      />
+
+      <Spell
+        v-else-if="currentStage === 'spell'"
+        :words="words"
+        @done="handleSpellDone"
+      />
+
       <view v-else class="placeholder-box">
-        <text>{{ currentStage }} 阶段待实现</text>
+        <text>未知阶段</text>
       </view>
     </view>
     
@@ -386,6 +431,40 @@ function handleSessionComplete() {
       opacity: 0.8;
     }
   }
+}
+
+.next-stage-actions {
+  margin-top: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.next-stage-btn__primary {
+  width: 100%;
+  background: linear-gradient(90deg, #1890ff, #52c41a);
+  color: #fff;
+  border: none;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  padding: 16rpx 0;
+  font-weight: 500;
+}
+
+.next-stage-btn__ghost {
+  width: 100%;
+  background-color: #fff;
+  color: #666;
+  border: 1rpx solid #d9d9d9;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+  padding: 14rpx 0;
+}
+
+.next-stage-tip {
+  font-size: 22rpx;
+  color: #999;
+  line-height: 1.5;
 }
 
 /* 加载状态 */
