@@ -148,11 +148,13 @@ async function makeupSignIn({ db, auth, event }) {
     // 4. 插入补签记录
     const now = new Date();
     await db.collection('user_sign_in').add({
-      user_id: userId,
-      date: signDate,
-      is_makeup: true,
-      created_at: now,
-      updated_at: now
+      data: {  // ✅ 修复：必须使用 data 字段包裹
+        user_id: userId,
+        date: signDate,
+        is_makeup: true,
+        created_at: now,
+        updated_at: now
+      }
     });
     
     return {
@@ -281,8 +283,101 @@ async function getSignedDates({ db, auth, event }) {
   }
 }
 
+/**
+ * 获取首页概览数据
+ * @param {Object} params - 参数对象
+ * @param {Object} params.db - 数据库实例
+ * @param {Object} params.auth - 认证信息
+ * @param {Object} params.event - 事件对象
+ * @returns {Object} 首页概览数据
+ */
+async function getHomeOverview({ db, auth, event }) {
+  const userId = auth.user.user_id;
+  const openid = auth.openid;  // ✅ 获取 openid
+  
+  try {
+    console.log(`[getHomeOverview] 获取首页概览:`, { userId, openid });
+    
+    // 1. 获取用户当前词书设置
+    const settingsRes = await db.collection('user_book_settings')
+      .where({ user_id: userId })
+      .limit(1)
+      .get();
+    
+    const settings = (settingsRes.data || [])[0];
+    const bookId = settings?.book_id || 'cet4';  // 默认 cet4
+    
+    console.log(`[getHomeOverview] 使用词书:`, bookId);
+    
+    const now = new Date();
+    const today = dayjs().format('YYYY-MM-DD');
+    
+    // 2. 统计待学习单词数（新词）
+    // ✅ 修复：使用 openid 而非 userId
+    const newWordsRes = await db.collection('user_word_state')
+      .where({
+        openid: openid,  // ✅ 使用 openid
+        book_id: bookId,
+        status: 'new'
+      })
+      .count();
+    
+    const pendingLearnCount = newWordsRes.total || 0;
+    
+    // 3. 统计待复习单词数（已到复习时间的非新词）
+    // ✅ 修复：使用 openid 而非 userId
+    const reviewWordsRes = await db.collection('user_word_state')
+      .where({
+        openid: openid,  // ✅ 使用 openid
+        book_id: bookId,
+        next_review_at: db.command.lte(now),
+        status: db.command.neq('new')
+      })
+      .count();
+    
+    const pendingReviewCount = reviewWordsRes.total || 0;
+    
+    // 4. 检查今日是否已签到
+    const signInRes = await db.collection('user_sign_in')
+      .where({
+        user_id: userId,
+        date: today
+      })
+      .limit(1)
+      .get();
+    
+    const isSignedInToday = signInRes.data.length > 0;
+    
+    console.log(`[getHomeOverview] 结果:`, {
+      pendingLearnCount,
+      pendingReviewCount,
+      isSignedInToday,
+      today
+    });
+    
+    return {
+      code: 0,
+      message: 'success',
+      data: {
+        pendingLearnCount,
+        pendingReviewCount,
+        isSignedInToday,
+        today
+      }
+    };
+  } catch (error) {
+    console.error('[getHomeOverview] 获取失败:', error);
+    return {
+      code: 500,
+      message: '获取首页数据失败',
+      error: error.message
+    };
+  }
+}
+
 module.exports = {
   signIn,
   makeupSignIn,
-  getSignedDates
+  getSignedDates,
+  getHomeOverview  // ✅ 新增
 };

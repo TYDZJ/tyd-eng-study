@@ -593,3 +593,60 @@ db.collection('study_logs')
 4. 复现步骤
 
 祝部署顺利！🚀
+
+---
+
+## 📝 版本变更记录
+
+### v1.1 - 2026-04-23（Spell 阶段调整为可选补充）
+
+#### 🔧 核心变更
+- **移除 Spell 阶段的后端支持**：`spell_done` 字段不再更新，仅保留用于数据兼容
+- **调整会话完成条件**：学习模式只需 `card_done && learn_done`，复习模式只需 `learn_done`
+- **前端流程优化**：Spell 变为可选补充练习，不计入后端进度统计
+
+#### 📊 影响的文件
+- `src/cloudfunctions/entry/handlers/learning_session.js`
+  - 第 603 行：修改 `finishedCount` 计算逻辑，移除对 `spell_done` 的检查
+  - 第 157 行：创建进度记录时仍包含 `spell_done: false`（向后兼容）
+  
+#### ⚠️ 索引配置说明
+**本次更新不影响数据库索引配置**，原因：
+1. 所有索引基于查询条件字段（`openid`、`session_id`、`word_id` 等），与业务字段无关
+2. 数据库查询模式未变，`where` 条件仍然使用相同的字段组合
+3. `spell_done` 字段可能仍存在于旧数据中，但后端不再更新它
+
+**现有索引仍然有效**：
+- ✅ `study_sessions`: `{ openid, book_id, mode, status }`、`{ openid, created_at }`
+- ✅ `study_session_word_progress`: `{ session_id, word_id }` (唯一)、`{ openid, session_id }`
+- ✅ `study_logs`: `{ request_id }` (唯一)、`{ session_id, word_id }`
+- ✅ `user_word_state`: `{ openid, book_id, word_id }` (唯一)、`{ openid, next_review_at }`
+- ✅ `user_learning_stats`: `{ openid, date }` (唯一)
+
+#### 💡 数据兼容性
+- **旧数据**：已存在的 `spell_done` 字段会保留，但不影响功能
+- **新数据**：创建进度记录时仍包含 `spell_done: false`，但后续不会更新
+- **前端适配**：前端代码应移除对 `spell_done` 的依赖，或将其视为可选字段
+
+#### 🎯 验收标准
+- ✅ Card 和 Learn 阶段正常完成并同步到云端
+- ✅ 完成 `card_done && learn_done` 后会话标记为 finished
+- ✅ Spell 阶段可在前端正常使用，但不更新后端进度
+- ✅ 进度条正确反映 Card 和 Learn 的完成情况
+
+---
+
+### v1.0 - 2026-04-14（初始版本）
+
+#### ✨ 新增功能
+- 学习会话管理系统（断点续学、SM2 算法、幂等性保障）
+- 6 个云函数接口
+- 完整的数据库索引配置
+- 三阶段学习流程（Card → Learn → Spell）
+
+#### 📊 数据库集合
+- `study_sessions` - 会话主表
+- `study_session_word_progress` - 单词进度表
+- `study_logs` - 学习日志（幂等性保障）
+- `user_word_state` - 用户单词记忆状态
+- `user_learning_stats` - 每日学习统计

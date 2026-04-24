@@ -5,38 +5,6 @@
 
 const dayjs = require('dayjs');
 
-// 词书库配置（可扩展为从数据库读取）
-const BOOK_LIBRARY = [
-  {
-    book_id: 'cet4',
-    book_name: '四级核心词汇',
-    book_desc: '大学英语四级考试核心词汇',
-    total_count: 2000,
-    cover_color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-  },
-  {
-    book_id: 'cet6',
-    book_name: '六级核心词汇',
-    book_desc: '大学英语六级考试核心词汇',
-    total_count: 2500,
-    cover_color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
-  },
-  {
-    book_id: 'kaoyan',
-    book_name: '考研核心词汇',
-    book_desc: '考研英语核心高频词汇',
-    total_count: 3500,
-    cover_color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
-  },
-  {
-    book_id: 'ielts',
-    book_name: '雅思核心词汇',
-    book_desc: '雅思考试必备核心词汇',
-    total_count: 4000,
-    cover_color: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
-  }
-];
-
 /**
  * 获取词书列表
  * @param {Object} params - 参数对象
@@ -45,15 +13,25 @@ const BOOK_LIBRARY = [
  */
 async function getBookList({ db }) {
   try {
+    // ✅ 从数据库 books 集合中获取所有词书
+    const result = await db.collection('books')
+      .orderBy('seq', 'asc')  // 按顺序排序
+      .get();
+    
+    // 如果数据库中没有数据，返回空数组（不硬编码）
+    const books = result.data || [];
+    
+    console.log(`[getBookList] 获取到 ${books.length} 本词书`);
+    
     return {
       code: 0,
       message: 'success',
       data: {
-        books: BOOK_LIBRARY
+        books
       }
     };
   } catch (error) {
-    console.error('获取词书列表失败:', error);
+    console.error('[getBookList] 获取词书列表失败:', error);
     return {
       code: 500,
       message: '获取词书列表失败',
@@ -125,8 +103,15 @@ async function setCurrentBook({ db, auth, event }) {
       };
     }
     
-    // 2. 从词书库中查找词书信息
-    const bookInfo = BOOK_LIBRARY.find(book => book.book_id === book_id);
+    // ✅ 2. 从数据库 books 集合中查找词书信息
+    const bookRes = await db.collection('books')
+      .where({
+        _id: book_id
+      })
+      .limit(1)
+      .get();
+    
+    const bookInfo = (bookRes.data || [])[0];
     if (!bookInfo) {
       return {
         code: 404,
@@ -136,10 +121,10 @@ async function setCurrentBook({ db, auth, event }) {
     
     // 3. 构建更新数据
     const updateData = {
-      book_id: bookInfo.book_id,
-      book_name: bookInfo.book_name,
-      book_desc: bookInfo.book_desc,
-      total_count: bookInfo.total_count,
+      book_id: bookInfo._id,
+      book_name: bookInfo.name,
+      book_desc: bookInfo.description || '',
+      total_count: bookInfo.word_count || 0,
       learned_count: 0, // 切换词书时重置学习进度
       updated_at: new Date()
     };
@@ -151,17 +136,23 @@ async function setCurrentBook({ db, auth, event }) {
       })
       .get();
     
+    const now = new Date();
+    
     if (queryResult.data.length > 0) {
       // 更新现有记录
       await db.collection('user_book_settings')
         .doc(queryResult.data[0]._id)
-        .update(updateData);
+        .update({
+          data: updateData  // 使用 data 字段包裹
+        });
     } else {
       // 创建新记录
       await db.collection('user_book_settings').add({
-        user_id: userId,
-        ...updateData,
-        created_at: new Date()
+        data: {  // 必须使用 data 字段包裹
+          user_id: userId,
+          ...updateData,
+          created_at: now
+        }
       });
     }
     
@@ -174,7 +165,7 @@ async function setCurrentBook({ db, auth, event }) {
       }
     };
   } catch (error) {
-    console.error('设置词书失败:', error);
+    console.error('[setCurrentBook] 设置词书失败:', error);
     return {
       code: 500,
       message: '设置词书失败',
@@ -229,8 +220,10 @@ async function updateBookProgress({ db, auth, event }) {
     await db.collection('user_book_settings')
       .doc(queryResult.data[0]._id)
       .update({
-        learned_count,
-        updated_at: new Date()
+        data: {  // 使用 data 字段包裹
+          learned_count,
+          updated_at: new Date()
+        }
       });
     
     return {

@@ -258,7 +258,7 @@ watch(() => [props.minDate, props.maxDate], () => {
         
         &.selected {
           background-color: #fff3e0;  // 橙色背景 - 选中
-          border: 2rpx solid #ff9800;
+          // border: 2rpx solid #ff9800;
           border-radius: 8rpx;
           transform: scale(1.05);
           box-shadow: 0 2rpx 8rpx rgba(255, 152, 0, 0.3);

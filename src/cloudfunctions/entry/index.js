@@ -36,6 +36,7 @@ const actionMap = {
   signIn: dashboardHandlers.signIn,
   makeupSignIn: dashboardHandlers.makeupSignIn,
   getSignedDates: dashboardHandlers.getSignedDates,
+  getHomeOverview: dashboardHandlers.getHomeOverview,  // ✅ 新增：首页概览
   // Learning stats handlers (学习统计相关)
   getUserStatistics: learningStatsHandlers.getUserStatistics,
   // Book settings handlers (词书管理相关)

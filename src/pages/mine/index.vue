@@ -166,7 +166,7 @@ const handleMenuClick = (item) => {
 
 // 功能菜单项
 const menuItems = [
-  { icon: '📊', name: '数据', url: '' },
+  // { icon: '📊', name: '数据', url: '' },
   { icon: '⚙️', name: '学习设置', url: '/pages/setting/learn' },
   { icon: '⚙️', name: '更多设置', url: '/pages/setting/index' }
 ];
