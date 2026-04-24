@@ -27,11 +27,24 @@ function main() {
   const bw4 = loadJson(OUT_BOOK_WORDS_CET4);
   const bw6 = loadJson(OUT_BOOK_WORDS_CET6);
 
-  assert(Array.isArray(books) && books.length === 2, "books 应为 2 条");
-  assert(books.some((b) => b._id === "cet4"), "缺少 cet4");
-  assert(books.some((b) => b._id === "cet6"), "缺少 cet6");
+  assert(Array.isArray(books) && books.length === 2, "books 应为 2 条（仅 cet4/cet6）");
+  assert(
+    books.some((b) => b._id === "cet4"),
+    "缺少 cet4",
+  );
+  assert(
+    books.some((b) => b._id === "cet6"),
+    "缺少 cet6",
+  );
 
   const wordSet = new Set(words.map((w) => w._id));
+  assert(wordSet.size === words.length, "words 中存在重复 _id");
+
+  const seq4 = bw4.map((r) => r.seq).sort((a, b) => a - b);
+  const seq6 = bw6.map((r) => r.seq).sort((a, b) => a - b);
+  assert(seq4[0] === 1 && seq4[seq4.length - 1] === bw4.length, "cet4 seq 非连续区间");
+  assert(seq6[0] === 1 && seq6[seq6.length - 1] === bw6.length, "cet6 seq 非连续区间");
+
   for (const bw of [...bw4, ...bw6]) {
     assert(bw.book_id && bw.word_id && bw.seq, "book_words 字段不完整");
     assert(wordSet.has(bw.word_id), `word_id 在 words 中不存在: ${bw.word_id}`);
@@ -39,8 +52,14 @@ function main() {
 
   const book4 = books.find((b) => b._id === "cet4");
   const book6 = books.find((b) => b._id === "cet6");
-  assert(book4.word_count === bw4.length, "cet4 word_count 与 book_words 不一致");
-  assert(book6.word_count === bw6.length, "cet6 word_count 与 book_words 不一致");
+  assert(
+    book4.word_count === bw4.length,
+    "cet4 word_count 与 book_words 不一致",
+  );
+  assert(
+    book6.word_count === bw6.length,
+    "cet6 word_count 与 book_words 不一致",
+  );
 
   let emptyTrans = 0;
   for (const w of words) {

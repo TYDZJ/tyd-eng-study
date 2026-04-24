@@ -15,29 +15,34 @@ const DEFAULT_VOCAB_ROOT = path.resolve(
   "..",
   "..",
   "..",
-  "english-vocabulary-master"
+  "english-vocabulary-master",
 );
 
 const VOCAB_ROOT = process.env.ENGLISH_VOCAB_ROOT || DEFAULT_VOCAB_ROOT;
 
-/** 每本词书截取条数（第一版小样本默认 50） */
-const LIMIT = Math.max(
-  1,
-  Math.min(5000, parseInt(process.env.IMPORT_WORD_LIMIT || "50", 10) || 50)
-);
+/**
+ * 每本词书截取条数：
+ * - IMPORT_WORD_LIMIT=0 或不传：全量
+ * - IMPORT_WORD_LIMIT>0：按指定条数截取（用于抽样测试）
+ */
+const parsedLimit = parseInt(process.env.IMPORT_WORD_LIMIT || "0", 10);
+const LIMIT =
+  Number.isFinite(parsedLimit) && parsedLimit > 0
+    ? Math.min(50000, parsedLimit)
+    : 0;
 
 const CET4_SOURCE = path.join(
   VOCAB_ROOT,
   "json_original",
   "json-sentence",
-  "CET4_1.json"
+  "CET4_1.json",
 );
 
 const CET6_SOURCE = path.join(
   VOCAB_ROOT,
   "json_original",
   "json-sentence",
-  "CET6_1.json"
+  "CET6_1.json",
 );
 
 const DATA_DIR = path.join(__dirname, "..", "data");

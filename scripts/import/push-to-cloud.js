@@ -27,7 +27,14 @@ const {
 } = require("./lib/config");
 
 function readWxCloudEnvId() {
-  const cfgPath = path.join(__dirname, "..", "..", "src", "config", "wx-cloud.js");
+  const cfgPath = path.join(
+    __dirname,
+    "..",
+    "..",
+    "src",
+    "config",
+    "wx-cloud.js",
+  );
   if (!fs.existsSync(cfgPath)) return "";
   const text = fs.readFileSync(cfgPath, "utf8");
   const m = text.match(/WX_CLOUD_ENV_ID\s*=\s*["']([^"']+)["']/);
@@ -76,7 +83,7 @@ function runCloudbaseCli(args) {
     "@cloudbase",
     "cli",
     "bin",
-    "cloudbase"
+    "cloudbase",
   );
 
   let cmd = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -124,7 +131,9 @@ function pushByCliLogin(envId, collection, docs) {
   }
   if (current.length > 0) chunks.push(current);
 
-  console.log(`${collection} 准备写入: ${docs.length} 条，分 ${chunks.length} 批`);
+  console.log(
+    `${collection} 准备写入: ${docs.length} 条，分 ${chunks.length} 批`,
+  );
   for (let i = 0; i < chunks.length; i += 1) {
     const command = buildUpdateCommand(collection, chunks[i]);
     runCloudbaseCli([
@@ -144,11 +153,12 @@ function pushByCliLogin(envId, collection, docs) {
 async function main() {
   const secretId = process.env.TCB_SECRET_ID || "";
   const secretKey = process.env.TCB_SECRET_KEY || "";
-  const envId =
-    process.env.TCB_ENV_ID || readWxCloudEnvId() || "";
+  const envId = process.env.TCB_ENV_ID || readWxCloudEnvId() || "";
 
   if (!envId) {
-    console.log("未检测到 TCB_ENV_ID，请先设置环境变量或在 src/config/wx-cloud.js 中配置 WX_CLOUD_ENV_ID。");
+    console.log(
+      "未检测到 TCB_ENV_ID，请先设置环境变量或在 src/config/wx-cloud.js 中配置 WX_CLOUD_ENV_ID。",
+    );
     process.exit(1);
   }
 
@@ -203,7 +213,9 @@ async function main() {
   try {
     runCloudbaseCli(["env", "list", "--env-id", envId, "--json"]);
   } catch (e) {
-    console.error("未检测到可用的 CloudBase CLI 登录态，请先执行: npx cloudbase login");
+    console.error(
+      "未检测到可用的 CloudBase CLI 登录态，请先执行: npx cloudbase login",
+    );
     console.error("或配置 TCB_SECRET_ID / TCB_SECRET_KEY 后重试。");
     console.error(String(e.message || e));
     process.exit(1);
