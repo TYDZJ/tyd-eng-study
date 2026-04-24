@@ -143,6 +143,32 @@ function main() {
       created_at: now,
       updated_at: now,
     },
+    {
+      _id: "kaoyan",
+      name: "考研核心词汇",
+      description: "考研英语核心高频词汇",
+      level: 7,
+      word_count: 0,
+      cover_url: "",
+      cover_color: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+      seq: 3,
+      source: "待导入",
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      _id: "ielts",
+      name: "雅思核心词汇",
+      description: "雅思考试必备核心词汇",
+      level: 8,
+      word_count: 0,
+      cover_url: "",
+      cover_color: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+      seq: 4,
+      source: "待导入",
+      created_at: now,
+      updated_at: now,
+    },
   ];
 
   fs.writeFileSync(OUT_BOOKS, JSON.stringify(books, null, 2), "utf8");
