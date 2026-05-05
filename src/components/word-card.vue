@@ -392,7 +392,7 @@ const getRelatedWordsList = () => {
 
 <style lang="scss" scoped>
 .word-card-box {
-  padding: 32rpx;
+  // padding: 32rpx;
   margin: 20rpx;
 }
 

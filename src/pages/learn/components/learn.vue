@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import WordCard from '@/components/word-card.vue'
 
 /**
  * 认读练习（learn 阶段）
@@ -52,6 +53,74 @@ function formatWordCn(word) {
   if (!t) return ''
   return `${t.type ? `${t.type} ` : ''}${t.translation || ''}`.trim()
 }
+
+/**
+ * 将 learn 阶段的单词数据转换为 word-card 组件所需的格式
+ * @param {Object} word - learn 阶段的单词对象
+ * @returns {Object} - 符合 word-card props 的数据结构
+ */
+function transformToWordCardData(word) {
+  if (!word) return {}
+  
+  return {
+    headWord: word.word,
+    content: {
+      word: {
+        wordHead: word.word,
+        wordId: word._id,
+        content: {
+          usphone: word.us || '',
+          ukphone: word.uk || '',
+          trans: (word.translations || []).map(t => ({
+            pos: t.type || '',
+            tranCn: t.translation || '',
+            descCn: '中释',
+            descOther: '英释',
+            tranOther: ''
+          })),
+          sentence: {
+            sentences: (word.sentences || []).map(s => ({
+              sContent: s.sentence || '',
+              sCn: s.translation || ''
+            })),
+            desc: '例句'
+          },
+          phrase: {
+            phrases: (word.phrases || []).map(p => ({
+              pContent: p.phrase || '',
+              pCn: p.translation || ''
+            })),
+            desc: '短语'
+          },
+          relWord: {
+            rels: [],
+            desc: '同根'
+          },
+          syno: {
+            synos: [],
+            desc: '同近'
+          }
+        }
+      }
+    },
+    bookId: word.bookId || ''
+  }
+}
+
+/**
+ * 获取当前可见槽位的 word-card 数据
+ */
+const currentWordCardData = computed(() => {
+  const wIdx = visibleWordIndex.value
+  const word = wordList.value[wIdx]
+  if (!word) return {}
+  
+  // 从原始 words 中找到对应的完整数据
+  const originalWord = props.words.find(w => w._id === word._id)
+  if (!originalWord) return {}
+  
+  return transformToWordCardData(originalWord)
+})
 
 /**
  * 当前题列表（ref 而非纯 computed）：需在用户操作里改写 passed、与 rounds 下标对齐
@@ -331,16 +400,28 @@ const openDetail = () => {
       >
         <view class="slide-inner">
           <template v-if="wordList[slotWordIndex[pane]]">
-            <!-- 英文 + 中文（首轮隐藏中文，占位防布局跳动） -->
-            <view class="text-area">
+            <!-- 使用 word-card 组件展示单词详情 -->
+            <view 
+              v-if="showChinese(slotWordIndex[pane])" 
+              class="word-card-wrapper"
+            >
+              <WordCard 
+                :word-data="currentWordCardData"
+                :show-translation="true"
+                :show-sentence="true"
+                :show-phrase="true"
+                :show-rel-word="false"
+                :show-syno="false"
+              />
+            </view>
+            
+            <!-- 未展开时显示简化的英文+占位中文 -->
+            <view 
+              v-else 
+              class="text-area"
+            >
               <text class="word-en" @click="openDetail">{{ wordList[slotWordIndex[pane]].en }}</text>
-              <text
-                v-if="showChinese(slotWordIndex[pane])"
-                class="word-cn"
-              >
-                {{ wordList[slotWordIndex[pane]].cn }}
-              </text>
-              <text v-else class="word-cn word-cn--placeholder"> </text>
+              <text class="word-cn word-cn--placeholder"> </text>
             </view>
 
             <!-- 首轮：认识 | 不认识 -->
@@ -405,7 +486,7 @@ const openDetail = () => {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 32rpx 24rpx 24rpx;
+  // padding: 32rpx 24rpx 24rpx;
   box-sizing: border-box;
 }
 
@@ -437,6 +518,14 @@ const openDetail = () => {
     min-height: 1.2em;
     opacity: 0;
   }
+}
+
+.word-card-wrapper {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  padding-top: 16rpx;
+  min-height: 0;
 }
 
 .btn-row {

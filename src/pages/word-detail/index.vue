@@ -24,6 +24,7 @@ const wordData = {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #ffe3e3;
+  // background: #ffe3e3;
+  background: #dee8ff;
 }
 </style>

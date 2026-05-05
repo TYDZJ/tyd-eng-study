@@ -268,7 +268,7 @@ wx.cloud.callFunction({
 用户操作 → 小程序前端 → callEntryCloud → entry云函数
                                       ↓
                               分发到对应 handler
-                              (dashboard / learning_stats / book_settings)
+                              (dashboard / learning_stats / book_settings 等具体实现)
                                       ↓
                               读写数据库集合
                                       ↓
